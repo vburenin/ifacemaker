@@ -6,7 +6,7 @@ My primary use case is to generate go-mocks from interfaces. So, unit testing ge
 ## Install
 
 ```
-github.com/vburenin/ifacemaker
+go get github.com/vburenin/ifacemaker
 ```
 
 ## Usage
