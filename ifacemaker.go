@@ -15,6 +15,7 @@ type cmdlineArgs struct {
 	Files      []string `cli:"*f,file" usage:"go source file with the structure"`
 	StructType string   `cli:"*s,struct" usage:"Structure type name to look for"`
 	IfaceName  string   `cli:"*i,iface" usage:"Exported interface name"`
+	PkgName    string   `cli:"*p,pkg" usage:"Package name"`
 	NoDoc      bool     `cli:"d,nodoc" usage:"Copy docs from methods" dft:"false"`
 	Output     string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout"`
 }
@@ -35,7 +36,7 @@ func run(args *cmdlineArgs) {
 		}
 	}
 
-	result, err := maker.MakeInterface(args.IfaceName, allMethods, nil)
+	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, nil)
 	result = append(result, '\n')
 	if err != nil {
 		log.Fatal(err.Error())
