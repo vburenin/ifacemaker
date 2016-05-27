@@ -3,7 +3,13 @@
 This is a development helper that generates an interface from a structure methods.
 My primary use case is to generate go-mocks from interfaces. So, unit testing gets easier.
 
+## Install
 
+```
+github.com/vburenin/ifacemaker
+```
+
+## Usage
 ```
 ~ » ifacemaker --help
 Options:
