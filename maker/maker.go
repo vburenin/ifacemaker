@@ -87,8 +87,10 @@ func ParseStruct(src []byte, structName string, noDoc bool) []string {
 
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
-			//log.Println(a, fd.Name, fd.Doc.Text())
-
+			methodName := fd.Name.String()
+			if methodName[0] > 'Z' {
+				continue
+			}
 			params, _ := GetParameters(src, fd.Type.Params)
 			ret, merged := GetParameters(src, fd.Type.Results)
 
@@ -98,7 +100,7 @@ func ParseStruct(src []byte, structName string, noDoc bool) []string {
 			} else {
 				retValues = strings.Join(ret, ", ")
 			}
-			method := fmt.Sprintf("%s(%s) %s", fd.Name, strings.Join(params, ", "), retValues)
+			method := fmt.Sprintf("%s(%s) %s", methodName, strings.Join(params, ", "), retValues)
 			if fd.Doc != nil && !noDoc {
 				for _, d := range fd.Doc.List {
 					output = append(output, string(src[d.Pos()-1:d.End()-1]))
