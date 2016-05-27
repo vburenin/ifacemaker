@@ -1,19 +1,15 @@
 package maker
 
 import (
+	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"log"
-
-	"fmt"
-	"go/ast"
 	"strings"
 
 	"golang.org/x/tools/imports"
 )
-
-type ASTParser struct {
-}
 
 func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 	fd, ok := fl.(*ast.FuncDecl)

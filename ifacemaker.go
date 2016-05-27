@@ -1,10 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
-
-	"fmt"
 
 	"github.com/mkideal/cli"
 	"github.com/vburenin/ifacemaker/maker"
