@@ -1,7 +1,8 @@
 # ifacemaker
 
 This is a development helper that generates an interface from a structure methods.
-My primary use case is to generate go-mocks from interfaces. So, unit testing gets easier.
+My primary use case is to generate interfaces for gomock to generate 
+mocks from those interfaces. So, unit testing gets easier.
 
 ## Install
 
