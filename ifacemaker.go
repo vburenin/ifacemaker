@@ -21,7 +21,7 @@ type cmdlineArgs struct {
 
 func run(args *cmdlineArgs) {
 	allMethods := []string{}
-	mset := map[string]struct{}{}
+	mset := make(map[string]struct{})
 	for _, f := range args.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {

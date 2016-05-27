@@ -29,6 +29,9 @@ func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 }
 
 func GetParameters(src []byte, fl *ast.FieldList) ([]string, bool) {
+	if fl == nil {
+		return nil, false
+	}
 	merged := false
 	parts := []string{}
 
