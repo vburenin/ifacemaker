@@ -78,7 +78,7 @@ func MakeInterface(pkgName, ifaceName string, methods []string, imports []string
 	return FormatCode(strings.Join(output, "\n"))
 }
 
-func ParseStruct(src []byte, structName string, noDoc bool) []string {
+func ParseStruct(src []byte, structName string, copyDocs bool) []string {
 
 	output := []string{}
 
@@ -104,7 +104,7 @@ func ParseStruct(src []byte, structName string, noDoc bool) []string {
 				retValues = strings.Join(ret, ", ")
 			}
 			method := fmt.Sprintf("%s(%s) %s", methodName, strings.Join(params, ", "), retValues)
-			if fd.Doc != nil && !noDoc {
+			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
 					output = append(output, string(src[d.Pos()-1:d.End()-1]))
 				}
