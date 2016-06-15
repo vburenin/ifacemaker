@@ -11,12 +11,12 @@ import (
 
 type cmdlineArgs struct {
 	cli.Helper
-	Files      []string `cli:"*f,file" usage:"go source file with the structure"`
-	StructType string   `cli:"*s,struct" usage:"Structure type name to look for"`
-	IfaceName  string   `cli:"*i,iface" usage:"Exported interface name"`
-	PkgName    string   `cli:"*p,pkg" usage:"Package name"`
-	NoDoc      bool     `cli:"d,nodoc" usage:"Copy docs from methods" dft:"false"`
-	Output     string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout"`
+	Files      []string `cli:"*f,file" usage:"Go source file to read"`
+	StructType string   `cli:"*s,struct" usage:"Generate an interface for this structure name"`
+	IfaceName  string   `cli:"*i,iface" usage:"Name of the generated interface"`
+	PkgName    string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
+	CopyDocs   bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
+	Output     string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
 }
 
 func run(args *cmdlineArgs) {
@@ -27,7 +27,7 @@ func run(args *cmdlineArgs) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		for _, m := range maker.ParseStruct(src, args.StructType, args.NoDoc) {
+		for _, m := range maker.ParseStruct(src, args.StructType, args.CopyDocs) {
 			if _, ok := mset[m]; !ok {
 				allMethods = append(allMethods, m)
 				mset[m] = struct{}{}
