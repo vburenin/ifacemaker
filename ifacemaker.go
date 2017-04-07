@@ -21,21 +21,30 @@ type cmdlineArgs struct {
 
 func run(args *cmdlineArgs) {
 	allMethods := []string{}
+	allImports := []string{}
 	mset := make(map[string]struct{})
+	iset := make(map[string]struct{})
 	for _, f := range args.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		for _, m := range maker.ParseStruct(src, args.StructType, args.CopyDocs) {
+		methods, imports := maker.ParseStruct(src, args.StructType, args.CopyDocs)
+		for _, m := range methods {
 			if _, ok := mset[m]; !ok {
 				allMethods = append(allMethods, m)
 				mset[m] = struct{}{}
 			}
 		}
+		for _, i := range imports {
+			if _, ok := iset[i]; !ok {
+				allImports = append(allImports, i)
+				iset[i] = struct{}{}
+			}
+		}
 	}
 
-	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, nil)
+	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, allImports)
 	result = append(result, '\n')
 	if err != nil {
 		log.Fatal(err.Error())
