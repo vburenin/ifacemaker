@@ -45,7 +45,6 @@ func run(args *cmdlineArgs) {
 	}
 
 	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, allImports)
-	result = append(result, '\n')
 	if err != nil {
 		log.Fatal(err.Error())
 	}
