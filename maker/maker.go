@@ -71,21 +71,31 @@ func FormatCode(code string) ([]byte, error) {
 func MakeInterface(pkgName, ifaceName string, methods []string, imports []string) ([]byte, error) {
 	output := []string{
 		"package " + pkgName,
-		fmt.Sprintf("type %s interface {", ifaceName),
+		"import (",
 	}
+	output = append(output, imports...)
+	output = append(output,
+		")",
+		fmt.Sprintf("type %s interface {", ifaceName),
+	)
 	output = append(output, methods...)
 	output = append(output, "}")
 	return FormatCode(strings.Join(output, "\n"))
 }
 
-func ParseStruct(src []byte, structName string, copyDocs bool) []string {
-
-	output := []string{}
-
+func ParseStruct(src []byte, structName string, copyDocs bool) (methods []string, imports []string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
+	}
+
+	for _, i := range a.Imports {
+		if i.Name != nil {
+			imports = append(imports, fmt.Sprintf("%s %s", i.Name.String(), i.Path.Value))
+		} else {
+			imports = append(imports, fmt.Sprintf("%s", i.Path.Value))
+		}
 	}
 
 	for _, d := range a.Decls {
@@ -97,7 +107,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool) []string {
 			params, _ := GetParameters(src, fd.Type.Params)
 			ret, merged := GetParameters(src, fd.Type.Results)
 
-			retValues := ""
+			var retValues string
 			if merged {
 				retValues = fmt.Sprintf("(%s)", strings.Join(ret, ", "))
 			} else {
@@ -106,11 +116,11 @@ func ParseStruct(src []byte, structName string, copyDocs bool) []string {
 			method := fmt.Sprintf("%s(%s) %s", methodName, strings.Join(params, ", "), retValues)
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
-					output = append(output, string(src[d.Pos()-1:d.End()-1]))
+					methods = append(methods, string(src[d.Pos()-1:d.End()-1]))
 				}
 			}
-			output = append(output, method)
+			methods = append(methods, method)
 		}
 	}
-	return output
+	return
 }
