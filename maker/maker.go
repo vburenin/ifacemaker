@@ -11,6 +11,18 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+type Method struct {
+	Code string
+	Docs []string
+}
+
+func (m *Method) Lines() []string {
+	var lines []string
+	lines = append(lines, m.Docs...)
+	lines = append(lines, m.Code)
+	return lines
+}
+
 func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 	fd, ok := fl.(*ast.FuncDecl)
 	if !ok {
@@ -83,7 +95,7 @@ func MakeInterface(pkgName, ifaceName string, methods []string, imports []string
 	return FormatCode(strings.Join(output, "\n"))
 }
 
-func ParseStruct(src []byte, structName string, copyDocs bool) (methods []string, imports []string) {
+func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method, imports []string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -114,12 +126,16 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []string
 				retValues = strings.Join(ret, ", ")
 			}
 			method := fmt.Sprintf("%s(%s) %s", methodName, strings.Join(params, ", "), retValues)
+			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
-					methods = append(methods, string(src[d.Pos()-1:d.End()-1]))
+					docs = append(docs, string(src[d.Pos()-1:d.End()-1]))
 				}
 			}
-			methods = append(methods, method)
+			methods = append(methods, Method{
+				Code: method,
+				Docs: docs,
+			})
 		}
 	}
 	return

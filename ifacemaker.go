@@ -31,9 +31,9 @@ func run(args *cmdlineArgs) {
 		}
 		methods, imports := maker.ParseStruct(src, args.StructType, args.CopyDocs)
 		for _, m := range methods {
-			if _, ok := mset[m]; !ok {
-				allMethods = append(allMethods, m)
-				mset[m] = struct{}{}
+			if _, ok := mset[m.Code]; !ok {
+				allMethods = append(allMethods, m.Lines()...)
+				mset[m.Code] = struct{}{}
 			}
 		}
 		for _, i := range imports {
