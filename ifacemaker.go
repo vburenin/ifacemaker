@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"path/filepath"
 
 	"github.com/mkideal/cli"
 	"github.com/vburenin/ifacemaker/maker"
@@ -20,31 +21,22 @@ type cmdlineArgs struct {
 }
 
 func run(args *cmdlineArgs) {
-	allMethods := []string{}
-	allImports := []string{}
-	mset := make(map[string]struct{})
-	iset := make(map[string]struct{})
+	maker := &maker.Maker{
+		StructName: args.StructType,
+		CopyDocs:   args.CopyDocs,
+	}
 	for _, f := range args.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports := maker.ParseStruct(src, args.StructType, args.CopyDocs)
-		for _, m := range methods {
-			if _, ok := mset[m.Code]; !ok {
-				allMethods = append(allMethods, m.Lines()...)
-				mset[m.Code] = struct{}{}
-			}
-		}
-		for _, i := range imports {
-			if _, ok := iset[i]; !ok {
-				allImports = append(allImports, i)
-				iset[i] = struct{}{}
-			}
+		err = maker.ParseSource(src, filepath.Base(f))
+		if err != nil {
+			log.Fatal(err.Error())
 		}
 	}
 
-	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, allImports)
+	result, err := maker.MakeInterface(args.PkgName, args.IfaceName)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

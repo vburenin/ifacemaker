@@ -1,0 +1,11 @@
+language: go
+go:
+  - 1.4
+  - 1.5
+  - 1.6
+  - 1.7
+  - 1.8
+  - tip
+sudo: false
+go_import_path: github.com/vburenin/ifacemaker # required for forks to build properly
+install: scripts/deps.sh
