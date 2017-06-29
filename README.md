@@ -72,11 +72,11 @@ $ ifacemaker -f human.go -s Human -i HumanIface -p humantest
 package humantest
 
 type HumanIface interface {
-	// Returns the name of our Human
+	// Returns the name of our Human.
 	GetName() string
 	// Our Human just had a birthday! Increase its age.
 	Birthday()
-	// Force the Human to say hello.
+	// Make the Human say hello.
 	SayHello()
 }
 
