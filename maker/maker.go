@@ -57,9 +57,11 @@ func GetParameters(src []byte, fl *ast.FieldList) ([]string, bool) {
 		}
 
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
+
 		var v string
 		if len(names) > 0 {
 			v = fmt.Sprintf("%s %s", strings.Join(names, ", "), t)
+			merged = true
 		} else {
 			v = t
 		}
@@ -92,7 +94,8 @@ func MakeInterface(pkgName, ifaceName string, methods []string, imports []string
 	)
 	output = append(output, methods...)
 	output = append(output, "}")
-	return FormatCode(strings.Join(output, "\n"))
+	code := strings.Join(output, "\n")
+	return FormatCode(code)
 }
 
 func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method, imports []string) {
