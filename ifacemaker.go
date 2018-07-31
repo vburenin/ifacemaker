@@ -15,7 +15,7 @@ type cmdlineArgs struct {
 	StructType     string   `cli:"*s,struct" usage:"Generate an interface for this structure name"`
 	IfaceName      string   `cli:"*i,iface" usage:"Name of the generated interface"`
 	PkgName        string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
-	ExcludeMethods []string `cli:"*e,exclude" usage:"Method name for not generation " `
+	ExcludeMethods []string `cli:"e,exclude" usage:"Method name for not generation " `
 	CopyDocs       bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
 	Output         string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
 }
