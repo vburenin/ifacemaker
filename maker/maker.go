@@ -16,7 +16,7 @@ type Method struct {
 	Docs []string
 }
 
-type Parsed struct {
+type StructData struct {
 	Embedded []string
 	Methods  []Method
 	Imports  []string
@@ -46,31 +46,39 @@ func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 }
 func GetStructName(src []byte, dec interface{}) string {
 
-	if gd, ok := dec.(*ast.GenDecl); ok {
-		if gd.Tok == token.TYPE {
-			if ts, ok := gd.Specs[0].(*ast.TypeSpec); ok {
-				return ts.Name.Name
-			}
-		}
+	gd, isGd := dec.(*ast.GenDecl)
+	if !isGd || gd.Tok != token.TYPE {
+		return ""
 	}
-	return ""
+	ts, isTs := gd.Specs[0].(*ast.TypeSpec)
+	if !isTs {
+		return ""
+	}
+	return ts.Name.Name
+
 }
 
 func GetEmbedded(src []byte, dec interface{}) (embeds []string) {
 
-	if gd, ok := dec.(*ast.GenDecl); ok {
-		if gd.Tok == token.TYPE {
-			if ts, ok := gd.Specs[0].(*ast.TypeSpec); ok {
-				if st, ok := ts.Type.(*ast.StructType); ok {
-					for _, l := range st.Fields.List {
-						if l.Names == nil {
-							embeds = append(embeds, l.Type.(*ast.Ident).Name)
-						}
-					}
-				}
-			}
+	gd, isGd := dec.(*ast.GenDecl)
+	if !isGd || gd.Tok != token.TYPE {
+		return embeds
+	}
+	ts, isTs := gd.Specs[0].(*ast.TypeSpec)
+	if !isTs {
+		return embeds
+	}
+	st, isSt := ts.Type.(*ast.StructType)
+	if !isSt {
+		return embeds
+	}
+
+	for _, l := range st.Fields.List {
+		if l.Names == nil {
+			embeds = append(embeds, l.Type.(*ast.Ident).Name)
 		}
 	}
+
 	return embeds
 }
 
@@ -145,12 +153,13 @@ func (strs StringSlice) Contain(s string) bool {
 	return false
 }
 
-func ParseStruct(src []byte, copyDocs bool, exs []string) (parseds map[string]*Parsed) {
+func ParseStruct(src []byte, copyDocs bool, oexs []string) (sdata map[string]*StructData) {
 
-	parseds = make(map[string]*Parsed)
+	sdata = make(map[string]*StructData)
 	var imports []string
 
 	fset := token.NewFileSet()
+	exs := StringSlice(oexs)
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -167,10 +176,10 @@ func ParseStruct(src []byte, copyDocs bool, exs []string) (parseds map[string]*P
 	for _, d := range a.Decls {
 
 		if name := GetStructName(src, d); name != "" {
-			if parseds[name] == nil {
-				parseds[name] = &Parsed{}
+			if sdata[name] == nil {
+				sdata[name] = &StructData{}
 			}
-			parseds[name].Embedded = append(parseds[name].Embedded, GetEmbedded(src, d)...)
+			sdata[name].Embedded = append(sdata[name].Embedded, GetEmbedded(src, d)...)
 			continue
 		}
 
@@ -182,12 +191,12 @@ func ParseStruct(src []byte, copyDocs bool, exs []string) (parseds map[string]*P
 			if methodName[0] > 'Z' {
 				continue
 			}
-			if StringSlice(exs).Contain(methodName) {
+			if exs.Contain(methodName) {
 				continue
 			}
 
-			if parseds[a] == nil {
-				parseds[a] = &Parsed{}
+			if sdata[a] == nil {
+				sdata[a] = &StructData{}
 			}
 		} else {
 
@@ -211,11 +220,11 @@ func ParseStruct(src []byte, copyDocs bool, exs []string) (parseds map[string]*P
 			}
 		}
 
-		parseds[a].Methods = append(parseds[a].Methods, Method{
+		sdata[a].Methods = append(sdata[a].Methods, Method{
 			Code: method,
 			Docs: docs,
 		})
-		parseds[a].Imports = imports
+		sdata[a].Imports = imports
 	}
 
 	return

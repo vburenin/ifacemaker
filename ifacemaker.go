@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/kazu/ifacemaker/maker"
+	"github.com/vburenin/ifacemaker/maker"
 	"github.com/mkideal/cli"
 )
 
@@ -25,16 +25,14 @@ func run(args *cmdlineArgs) {
 	allImports := []string{}
 	mset := make(map[string]struct{})
 	iset := make(map[string]struct{})
-	parseds := make(map[string]*maker.Parsed)
-	fmt.Printf("files=%s\n", args.Files)
+	parseds := make(map[string]*maker.StructData)
 	for _, f := range args.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		//parseds := maker.ParseStruct(src, args.StructType, args.CopyDocs)
-		sparseds := maker.ParseStruct(src, args.CopyDocs, args.ExcludeMethods)
-		for s, parsed := range sparseds {
+		sparsed := maker.ParseStruct(src, args.CopyDocs, args.ExcludeMethods)
+		for s, parsed := range sparsed {
 			parseds[s] = parsed
 		}
 	}
