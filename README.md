@@ -25,6 +25,7 @@ Options:
   -p, --pkg         *Package name for the generated interface
   -d, --doc[=true]   Copy docs from methods
   -o, --output       Output file name. If not provided, result will be printed to stdout.
+  -c, --comment      Append comment to top  
 $
 ```
 
@@ -68,7 +69,7 @@ func main() {
 The ifacemaker helper program can generate this interface for you:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c Auto generated
 package humantest
 
 type HumanIface interface {
@@ -91,6 +92,6 @@ You can tell ifacemaker to write its output to a file, versus stdout, using the 
 parameter:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -o humaniface.go
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c Auto generated -o humaniface.go
 $
 ```
