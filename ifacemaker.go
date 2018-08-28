@@ -16,6 +16,7 @@ type cmdlineArgs struct {
 	IfaceName  string   `cli:"*i,iface" usage:"Name of the generated interface"`
 	PkgName    string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
 	CopyDocs   bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
+	Comment    string   `cli:"c,comment" usage:"Append comment to top"`
 	Output     string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
 }
 
@@ -44,7 +45,7 @@ func run(args *cmdlineArgs) {
 		}
 	}
 
-	result, err := maker.MakeInterface(args.PkgName, args.IfaceName, allMethods, allImports)
+	result, err := maker.MakeInterface(args.Comment, args.PkgName, args.IfaceName, allMethods, allImports)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
