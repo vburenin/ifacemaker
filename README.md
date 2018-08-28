@@ -69,7 +69,7 @@ func main() {
 The ifacemaker helper program can generate this interface for you:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c Auto generated
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c "DONT EDIT: Auto generated"
 package humantest
 
 type HumanIface interface {
@@ -92,6 +92,6 @@ You can tell ifacemaker to write its output to a file, versus stdout, using the 
 parameter:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c Auto generated -o humaniface.go
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c "DONT EDIT: Auto generated" -o humaniface.go
 $
 ```
