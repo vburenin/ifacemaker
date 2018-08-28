@@ -82,8 +82,9 @@ func FormatCode(code string) ([]byte, error) {
 	return imports.Process("", []byte(code), opts)
 }
 
-func MakeInterface(pkgName, ifaceName string, methods []string, imports []string) ([]byte, error) {
+func MakeInterface(comment, pkgName, ifaceName string, methods []string, imports []string) ([]byte, error) {
 	output := []string{
+		"// " + comment,
 		"package " + pkgName,
 		"import (",
 	}
