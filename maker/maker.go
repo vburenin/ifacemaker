@@ -82,7 +82,7 @@ func FormatCode(code string) ([]byte, error) {
 	return imports.Process("", []byte(code), opts)
 }
 
-func MakeInterface(comment, pkgName, ifaceName string, methods []string, imports []string) ([]byte, error) {
+func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []string, imports []string) ([]byte, error) {
 	output := []string{
 		"// " + comment,
 		"package " + pkgName,
@@ -91,6 +91,8 @@ func MakeInterface(comment, pkgName, ifaceName string, methods []string, imports
 	output = append(output, imports...)
 	output = append(output,
 		")",
+		"",
+		fmt.Sprintf("// %s", ifaceComment),
 		fmt.Sprintf("type %s interface {", ifaceName),
 	)
 	output = append(output, methods...)
