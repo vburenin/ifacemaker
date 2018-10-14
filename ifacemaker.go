@@ -11,13 +11,14 @@ import (
 
 type cmdlineArgs struct {
 	cli.Helper
-	Files      []string `cli:"*f,file" usage:"Go source file to read"`
-	StructType string   `cli:"*s,struct" usage:"Generate an interface for this structure name"`
-	IfaceName  string   `cli:"*i,iface" usage:"Name of the generated interface"`
-	PkgName    string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
-	CopyDocs   bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
-	Comment    string   `cli:"c,comment" usage:"Append comment to top"`
-	Output     string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
+	Files        []string `cli:"*f,file" usage:"Go source file to read"`
+	StructType   string   `cli:"*s,struct" usage:"Generate an interface for this structure name"`
+	IfaceName    string   `cli:"*i,iface" usage:"Name of the generated interface"`
+	PkgName      string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
+	IfaceComment string   `cli:"y,iface-comment" usage:"Comment for the interface, default is '// <iface> ...'"`
+	CopyDocs     bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
+	Comment      string   `cli:"c,comment" usage:"Append comment to top"`
+	Output       string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
 }
 
 func run(args *cmdlineArgs) {
@@ -45,7 +46,7 @@ func run(args *cmdlineArgs) {
 		}
 	}
 
-	result, err := maker.MakeInterface(args.Comment, args.PkgName, args.IfaceName, allMethods, allImports)
+	result, err := maker.MakeInterface(args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, allMethods, allImports)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -61,6 +62,9 @@ func run(args *cmdlineArgs) {
 func main() {
 	cli.Run(&cmdlineArgs{}, func(ctx *cli.Context) error {
 		argv := ctx.Argv().(*cmdlineArgs)
+		if argv.IfaceComment == "" {
+			argv.IfaceComment = fmt.Sprintf("%s ...", argv.IfaceName)
+		}
 		run(argv)
 		return nil
 	})
