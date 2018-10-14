@@ -11,6 +11,8 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+// Method describes the code and documentation
+// tied into a method
 type Method struct {
 	Code string
 	Docs []string
@@ -85,6 +87,7 @@ func FormatCode(code string) ([]byte, error) {
 func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []string, imports []string) ([]byte, error) {
 	output := []string{
 		"// " + comment,
+		"",
 		"package " + pkgName,
 		"import (",
 	}
