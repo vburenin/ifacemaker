@@ -18,14 +18,15 @@ Here is the help output of ifacemaker:
 $ ifacemaker --help
 Options:
 
-  -h, --help         display help information
-  -f, --file        *Go source file to read
-  -s, --struct      *Generate an interface for this structure name
-  -i, --iface       *Name of the generated interface
-  -p, --pkg         *Package name for the generated interface
-  -d, --doc[=true]   Copy docs from methods
-  -o, --output       Output file name. If not provided, result will be printed to stdout.
-  -c, --comment      Append comment to top  
+  -h, --help           display help information
+  -f, --file          *Go source file to read
+  -s, --struct        *Generate an interface for this structure name
+  -i, --iface         *Name of the generated interface
+  -p, --pkg           *Package name for the generated interface
+  -y, --iface-comment  Comment for the interface, default is '// <iface> ...'
+  -d, --doc[=true]     Copy docs from methods
+  -o, --output         Output file name. If not provided, result will be printed to stdout.
+  -c, --comment        Append comment to top
 $
 ```
 
@@ -69,9 +70,12 @@ func main() {
 The ifacemaker helper program can generate this interface for you:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c "DONT EDIT: Auto generated"
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated"
+// DONT EDIT: Auto generated
+
 package humantest
 
+// HumanIface makes human interaction easy
 type HumanIface interface {
 	// Returns the name of our Human.
 	GetName() string
@@ -92,6 +96,6 @@ You can tell ifacemaker to write its output to a file, versus stdout, using the 
 parameter:
 
 ```
-$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -c "DONT EDIT: Auto generated" -o humaniface.go
+$ ifacemaker -f human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated" -o humaniface.go
 $
 ```
