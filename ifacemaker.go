@@ -56,7 +56,6 @@ func run(args *cmdlineArgs) {
 	} else {
 		ioutil.WriteFile(args.Output, result, 0644)
 	}
-
 }
 
 func main() {
