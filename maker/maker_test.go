@@ -43,5 +43,3 @@ func TestParseStruct(t *testing.T) {
 	expected := "\"fmt\""
 	check(trimmedImp, expected, t)
 }
-
-func Test
