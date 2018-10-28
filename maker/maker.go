@@ -177,7 +177,6 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method
 	}
 
 	for i, d := range a.Decls {
-		fmt.Printf("%d:%+v\n", i, d)
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			methodName := fd.Name.String()
 			if isFunctionPrivate(methodName) {
