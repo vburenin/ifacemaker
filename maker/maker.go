@@ -61,10 +61,11 @@ func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 }
 
 // GetReceiverType checks if the FuncDecl
-// is a function, if it is return
-// a nil error because. If it is a method we hardcode a
-// 0 index fetch of the receiver because
-// a method can only have 1 receiver.
+// is a function or a method. If it is a
+// function it returns a nil ast.Expr and
+// a non-nil err. If it is a method it uses
+// a hardcoded 0 index to fetch the receiver
+// because a method can only have 1 receiver.
 // Which can make you wonder why it is a
 // list in the first place, but this type
 // from the `ast` pkg is used in other
@@ -79,6 +80,10 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
 // return values as a FieldList.
+// It then returns a []string with each
+// param or return value as a single string.
+// If the FieldList input is nil, it returns
+// nil
 func FormatFieldList(src []byte, fl *ast.FieldList) []string {
 	if fl == nil {
 		return nil
@@ -103,7 +108,10 @@ func FormatFieldList(src []byte, fl *ast.FieldList) []string {
 // FormatCode sets the options of the imports
 // pkg and then applies the Process method
 // which by default removes all of the imports
-// not used and formats the remaining
+// not used and formats the remaining docs,
+// imports and code like `gofmt`. It will
+// e.g. remove paranthesis around a unnamed
+// single return type
 func FormatCode(code string) ([]byte, error) {
 	opts := &imports.Options{
 		TabIndent: true,
@@ -176,7 +184,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method
 		}
 	}
 
-	for i, d := range a.Decls {
+	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			methodName := fd.Name.String()
 			if isFunctionPrivate(methodName) {
