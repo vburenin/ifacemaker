@@ -95,8 +95,8 @@ func FormatFieldList(src []byte, fl *ast.FieldList) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		typeSharingArgs := strings.Join(names, ", ")
 		if len(names) > 0 {
+			typeSharingArgs := strings.Join(names, ", ")
 			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))
 		} else {
 			parts = append(parts, t)
@@ -151,9 +151,6 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 // isFunctionPrivate checks whether the starting
 // sign is lower case
 func isFunctionPrivate(name string) bool {
-	if len(name) == 0 {
-		return false
-	}
 	return name[0] == '_' || (name[0] >= 'a' && name[0] <= 'z')
 }
 
