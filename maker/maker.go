@@ -150,7 +150,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 
 // isFunctionPrivate checks whether the starting
 // sign is lower case
-func isFunctionPrivate(name string) bool {
+func isMethodPrivate(name string) bool {
 	return name[0] == '_' || (name[0] >= 'a' && name[0] <= 'z')
 }
 
@@ -184,7 +184,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			methodName := fd.Name.String()
-			if isFunctionPrivate(methodName) {
+			if isMethodPrivate(methodName) {
 				continue
 			}
 			params := FormatFieldList(src, fd.Type.Params)

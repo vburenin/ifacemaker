@@ -120,10 +120,10 @@ func TestGetReceiverTypeName(t *testing.T) {
 	}
 }
 
-func TestIsFunctionPrivate(t *testing.T) {
+func TestIsMethodPrivate(t *testing.T) {
 	functionNames := map[string]bool{"_someFunc": true, "herp": true, "_SomeFunc": true, "SomeFunc": false, "ZooFunc": false}
 	for name, expected := range functionNames {
-		if isFunctionPrivate(name) != expected {
+		if isMethodPrivate(name) != expected {
 			t.Fatalf("Function name %s != expected value %+v", name, expected)
 		}
 	}
