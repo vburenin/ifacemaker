@@ -28,17 +28,31 @@ func (m *Method) Lines() []string {
 	return lines
 }
 
-// GetReceiverTypeName returns the name of the
+// GetReceiverTypeName takes in the entire
+// source code and a single declaration.
+// It then checks if the declaration is a
+// function declaration, if it is, it uses
+// the GetReceiverType to check whether
+// the declaration is a method or a function
+// if it is a function we fatally stop.
+// If it is a method we retrieve the type
+// of the receiver based on the types
+// start and end pos in combination with
+// the actual source code.
+// It then returns the name of the
 // receiver type and the function declaration
+//
+// Behavior is undefined for a src []byte that
+// isn't the source of the possible FuncDecl fl
 func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 	fd, ok := fl.(*ast.FuncDecl)
 	if !ok {
 		return "", nil
 	}
-	if fd.Recv.NumFields() != 1 {
+	t, err := GetReceiverType(fd)
+	if err != nil {
 		return "", nil
 	}
-	t := fd.Recv.List[0].Type
 	st := string(src[t.Pos()-1 : t.End()-1])
 	if len(st) > 0 && st[0] == '*' {
 		st = st[1:]
@@ -46,41 +60,58 @@ func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
 	return st, fd
 }
 
-// GetParameters ...
-func GetParameters(src []byte, fl *ast.FieldList) ([]string, bool) {
-	if fl == nil {
-		return nil, false
+// GetReceiverType checks if the FuncDecl
+// is a function or a method. If it is a
+// function it returns a nil ast.Expr and
+// a non-nil err. If it is a method it uses
+// a hardcoded 0 index to fetch the receiver
+// because a method can only have 1 receiver.
+// Which can make you wonder why it is a
+// list in the first place, but this type
+// from the `ast` pkg is used in other
+// places than for receivers
+func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
+	if fd.Recv == nil {
+		return nil, fmt.Errorf("fd is not a method, it is a function")
 	}
-	merged := false
-	parts := []string{}
+	return fd.Recv.List[0].Type, nil
+}
 
+// FormatFieldList takes in the source code
+// as a []byte and a FuncDecl parameters or
+// return values as a FieldList.
+// It then returns a []string with each
+// param or return value as a single string.
+// If the FieldList input is nil, it returns
+// nil
+func FormatFieldList(src []byte, fl *ast.FieldList) []string {
+	if fl == nil {
+		return nil
+	}
+	var parts []string
 	for _, l := range fl.List {
 		names := make([]string, len(l.Names))
-		if len(names) > 1 {
-			merged = true
-		}
 		for i, n := range l.Names {
 			names[i] = n.Name
 		}
-
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-
-		var v string
 		if len(names) > 0 {
-			v = fmt.Sprintf("%s %s", strings.Join(names, ", "), t)
-			merged = true
+			typeSharingArgs := strings.Join(names, ", ")
+			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))
 		} else {
-			v = t
+			parts = append(parts, t)
 		}
-		parts = append(parts, v)
 	}
-	return parts, merged || len(parts) > 1
+	return parts
 }
 
 // FormatCode sets the options of the imports
 // pkg and then applies the Process method
 // which by default removes all of the imports
-// not used and formats the remaining
+// not used and formats the remaining docs,
+// imports and code like `gofmt`. It will
+// e.g. remove paranthesis around a unnamed
+// single return type
 func FormatCode(code string) ([]byte, error) {
 	opts := &imports.Options{
 		TabIndent: true,
@@ -117,6 +148,12 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	return FormatCode(code)
 }
 
+// isFunctionPrivate checks whether the starting
+// sign is lower case
+func isMethodPrivate(name string) bool {
+	return name[0] == '_' || (name[0] >= 'a' && name[0] <= 'z')
+}
+
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
 // interface on and a bool saying whether it should
@@ -147,19 +184,12 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			methodName := fd.Name.String()
-			if methodName[0] > 'Z' {
+			if isMethodPrivate(methodName) {
 				continue
 			}
-			params, _ := GetParameters(src, fd.Type.Params)
-			ret, merged := GetParameters(src, fd.Type.Results)
-
-			var retValues string
-			if merged {
-				retValues = fmt.Sprintf("(%s)", strings.Join(ret, ", "))
-			} else {
-				retValues = strings.Join(ret, ", ")
-			}
-			method := fmt.Sprintf("%s(%s) %s", methodName, strings.Join(params, ", "), retValues)
+			params := FormatFieldList(src, fd.Type.Params)
+			ret := FormatFieldList(src, fd.Type.Results)
+			method := fmt.Sprintf("%s(%s) (%s)", methodName, strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
