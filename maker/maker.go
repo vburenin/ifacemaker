@@ -3,6 +3,7 @@ package maker
 import (
 	"fmt"
 	"go/ast"
+	"go/doc"
 	"go/parser"
 	"go/token"
 	"log"
@@ -139,7 +140,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	output = append(output,
 		")",
 		"",
-		fmt.Sprintf("// %s", ifaceComment),
+		fmt.Sprintf("// %s", strings.Replace(ifaceComment, "\n", "\n// ", -1)),
 		fmt.Sprintf("type %s interface {", ifaceName),
 	)
 	output = append(output, methods...)
@@ -166,7 +167,7 @@ func isMethodPrivate(name string) bool {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method, imports []string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -202,5 +203,16 @@ func ParseStruct(src []byte, structName string, copyDocs bool) (methods []Method
 			})
 		}
 	}
+
+	if copyTypeDocs {
+		pkg := &ast.Package{Files: map[string]*ast.File{"": a}}
+		doc := doc.New(pkg, "", doc.AllDecls)
+		for _, t := range doc.Types {
+			if t.Name == structName {
+				typeDoc = strings.TrimSuffix(t.Doc, "\n")
+			}
+		}
+	}
+
 	return
 }
