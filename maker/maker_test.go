@@ -86,12 +86,13 @@ func TestLines(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports := ParseStruct(src, "Person", true)
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true)
 	mustBeEqual(methods[0].Code, "Name() (string)", t)
 	imp := imports[0]
 	trimmedImp := strings.TrimSpace(imp)
 	expected := "\"fmt\""
 	mustBeEqual(trimmedImp, expected, t)
+	mustBeEqual(typeDoc, "Person ...", t)
 }
 
 func TestGetReceiverTypeName(t *testing.T) {
@@ -195,4 +196,54 @@ func compareStrArrays(actual []string, expected []string, t *testing.T) bool {
 		}
 	}
 	return true
+}
+
+func TestNoCopyTypeDocs(t *testing.T) {
+	_, _, typeDoc := ParseStruct(src, "Person", true, false)
+	mustBeEqual(typeDoc, "", t)
+}
+
+func TestMakeInterface(t *testing.T) {
+	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
+	imports := []string{`"github.com/example/example"`}
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff", methods, imports)
+	if err != nil {
+		t.Fatal("MakeInterface returned an error", err)
+	}
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package pkg
+
+import (
+	"github.com/example/example"
+)
+
+// MyInterface does cool stuff
+type MyInterface interface {
+	// MyMethod does cool stuff
+	MyMethod(string) example.Example
+}
+`
+
+	mustBeEqual(string(b), expected, t)
+}
+
+func TestMakeInterfaceMultiLineIfaceComment(t *testing.T) {
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", nil, nil)
+	if err != nil {
+		t.Fatal("MakeInterface returned an error", err)
+	}
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package pkg
+
+// MyInterface does cool stuff.
+// With multi-line comments.
+type MyInterface interface {
+}
+`
+
+	mustBeEqual(string(b), expected, t)
 }

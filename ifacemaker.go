@@ -17,6 +17,7 @@ type cmdlineArgs struct {
 	PkgName      string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
 	IfaceComment string   `cli:"y,iface-comment" usage:"Comment for the interface, default is '// <iface> ...'"`
 	CopyDocs     bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
+	CopyTypeDoc  bool     `cli:"D,type-doc" usage:"Copy type doc from struct"`
 	Comment      string   `cli:"c,comment" usage:"Append comment to top"`
 	Output       string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
 }
@@ -26,12 +27,13 @@ func run(args *cmdlineArgs) {
 	allImports := []string{}
 	mset := make(map[string]struct{})
 	iset := make(map[string]struct{})
+	var typeDoc string
 	for _, f := range args.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports := maker.ParseStruct(src, args.StructType, args.CopyDocs)
+		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.CopyDocs, args.CopyTypeDoc)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -44,6 +46,13 @@ func run(args *cmdlineArgs) {
 				iset[i] = struct{}{}
 			}
 		}
+		if typeDoc == "" {
+			typeDoc = parsedTypeDoc
+		}
+	}
+
+	if typeDoc != "" {
+		args.IfaceComment = fmt.Sprintf("%s\n%s", args.IfaceComment, typeDoc)
 	}
 
 	result, err := maker.MakeInterface(args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, allMethods, allImports)
