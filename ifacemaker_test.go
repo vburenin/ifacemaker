@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 func writeTestSourceFile() {
-	f, err := os.OpenFile(srcFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.ModeTemporary)
+	f, err := os.OpenFile(srcFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.ModePerm)
 	if err != nil {
 		panic("Failed to open test source file.")
 	}
