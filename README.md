@@ -1,4 +1,4 @@
-# ifacemaker
+# ifacemaker [![Build Status](https://travis-ci.com/vburenin/ifacemaker.svg?branch=master)](https://travis-ci.com/vburenin/ifacemaker)
 
 This is a development helper program that generates a Golang interface by inspecting
 the structure methods of an existing `.go` file. The primary use case is to generate
