@@ -16,11 +16,15 @@ type cmdlineArgs struct {
 	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
 	IfaceComment string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
-	CopyDocs     string   `short:"d" long:"doc" description:"Copy docs from methods" option:"true" option:"false" default:"true"`
-	copyDocs     bool
-	CopyTypeDoc  bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
-	Comment      string `short:"c" long:"comment" description:"Append comment to top"`
-	Output       string `short:"o" long:"output" description:"Output file name. If not provided, result will be printed to stdout."`
+
+	// jessevdk/go-flags doesn't support default values for boolean flags,
+	// so we use a string for backwards-compatibility and then convert it to a bool later.
+	CopyDocs string `short:"d" long:"doc" description:"Copy docs from methods" option:"true" option:"false" default:"true"`
+	copyDocs bool
+
+	CopyTypeDoc bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
+	Comment     string `short:"c" long:"comment" description:"Append comment to top"`
+	Output      string `short:"o" long:"output" description:"Output file name. If not provided, result will be printed to stdout."`
 }
 
 func run(args cmdlineArgs) {
@@ -72,8 +76,14 @@ func main() {
 	var args cmdlineArgs
 	_, err := flags.ParseArgs(&args, os.Args)
 	if err != nil {
-		log.Fatalln(err)
+		if flags.WroteHelp(err) {
+			return
+		}
+		// No need to log the error, flags.ParseArgs() already does this
+		os.Exit(1)
 	}
+
+	// Workaround because jessevdk/go-flags doesn't support default values for boolean flags
 	args.copyDocs = args.CopyDocs == "true"
 
 	if args.IfaceComment == "" {
