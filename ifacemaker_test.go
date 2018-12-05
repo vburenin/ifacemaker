@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	assert "github.com/stretchr/testify/assert"
 )
 
 var src = `package main
@@ -117,7 +119,7 @@ type PersonIface interface {
 
 `
 
-	mustBeEqual(out, expected, t)
+	assert.Equal(t, expected, out)
 }
 
 func TestMainNoIfaceComment(t *testing.T) {
@@ -151,7 +153,7 @@ type PersonIface interface {
 
 `
 
-	mustBeEqual(out, expected, t)
+	assert.Equal(t, expected, out)
 }
 
 func TestMainNoCopyTypeDocs(t *testing.T) {
@@ -184,13 +186,7 @@ type PersonIface interface {
 
 `
 
-	mustBeEqual(out, expected, t)
-}
-
-func mustBeEqual(value, pattern string, t *testing.T) {
-	if value != pattern {
-		t.Fatalf("Value %s did not match expected pattern %s", value, pattern)
-	}
+	assert.Equal(t, expected, out)
 }
 
 // not thread safe

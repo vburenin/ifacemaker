@@ -3,9 +3,10 @@ package maker
 import (
 	"go/parser"
 	"go/token"
-	"log"
 	"strings"
 	"testing"
+
+	assert "github.com/stretchr/testify/assert"
 )
 
 var (
@@ -39,7 +40,7 @@ var (
 		}
 
 		// Age ...
-		func (p *Person) SetAge(age int) int {
+		func (p *Person) SetAge(age int) {
 		    p.Age = age
 		}
 
@@ -70,37 +71,34 @@ var (
 		}`)
 )
 
-func mustBeEqual(value, pattern string, t *testing.T) {
-	if value != pattern {
-		t.Fatalf("Value %s did not match expected pattern %s", value, pattern)
-	}
-}
-
 func TestLines(t *testing.T) {
 	docs := []string{`// TestMethod is great`}
 	code := `func TestMethod() string {return "I am great"}`
+
 	method := Method{Code: code, Docs: docs}
 	lines := method.Lines()
-	mustBeEqual(lines[0], "// TestMethod is great", t)
-	mustBeEqual(lines[1], "func TestMethod() string {return \"I am great\"}", t)
+
+	assert.Equal(t, "// TestMethod is great", lines[0])
+	assert.Equal(t, "func TestMethod() string {return \"I am great\"}", lines[1])
 }
 
 func TestParseStruct(t *testing.T) {
 	methods, imports, typeDoc := ParseStruct(src, "Person", true, true)
-	mustBeEqual(methods[0].Code, "Name() (string)", t)
+
+	assert.Equal(t, "Name() (string)", methods[0].Code)
+
 	imp := imports[0]
 	trimmedImp := strings.TrimSpace(imp)
-	expected := "\"fmt\""
-	mustBeEqual(trimmedImp, expected, t)
-	mustBeEqual(typeDoc, "Person ...", t)
+
+	assert.Equal(t, `"fmt"`, trimmedImp)
+	assert.Equal(t, "Person ...", typeDoc)
 }
 
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+	assert.Nil(t, err, "ParseFile returned an error")
+
 	hasPersonFuncDecl := false
 	for _, d := range a.Decls {
 		typeName, fd := GetReceiverTypeName(src, d)
@@ -109,107 +107,69 @@ func TestGetReceiverTypeName(t *testing.T) {
 		}
 		switch typeName {
 		case "Person":
-			if fd == nil {
-				t.Fatalf("receiver type with name %s had a nil func decl", typeName)
-			}
+			assert.NotNil(t, fd, "receiver type with name %s had a nil func decl")
 			// OK
 			hasPersonFuncDecl = true
 		}
 	}
-	if !hasPersonFuncDecl {
-		t.Fatalf("Never registered a func decl with the `Person` receiver type")
-	}
+
+	assert.True(t, hasPersonFuncDecl, "Never registered a func decl with the `Person` receiver type")
 }
 
 func TestIsMethodPrivate(t *testing.T) {
 	functionNames := map[string]bool{"_someFunc": true, "herp": true, "_SomeFunc": true, "SomeFunc": false, "ZooFunc": false}
 	for name, expected := range functionNames {
-		if isMethodPrivate(name) != expected {
-			t.Fatalf("Function name %s != expected value %+v", name, expected)
-		}
+		assert.Equalf(t, expected, isMethodPrivate(name), "Function name %s != expected value %+v", name, expected)
 	}
-
 }
 
 func TestFormatFieldList(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+	assert.Nil(t, err, "ParseFile returned an error")
+
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
 			methodName := fd.Name.String()
 			params := FormatFieldList(src, fd.Type.Params)
 			results := FormatFieldList(src, fd.Type.Results)
+
+			var expectedParams []string
+			var expectedResults []string
 			switch methodName {
 			case "Name":
-				expectedParam := []string{}
-				expectedResults := []string{"string"}
-				if !compareStrArrays(expectedParam, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("Name did not have the expected params and/or results")
-				}
-			case "Age":
-				expectedParams := []string{}
-				expectedResults := []string{"int"}
-				if !compareStrArrays(expectedParams, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("Age did not have the expected params and/or results")
-				}
+				expectedResults = []string{"string"}
 			case "SetName":
-				expectedParams := []string{"name string"}
-				expectedResults := []string{}
-				if !compareStrArrays(expectedParams, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("SetName did not have the expected params and/or results")
-				}
+				expectedParams = []string{"name string"}
+			case "Age":
+				expectedResults = []string{"int"}
+			case "SetAge":
+				expectedParams = []string{"age int"}
+			case "AgeAndName":
+				expectedResults = []string{"int", "string"}
 			case "SetAgeAndName":
-				expectedParams := []string{"name string", "age int"}
-				expectedResults := []string{}
-				if !compareStrArrays(expectedParams, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("SetAgeAndName did not have the expected params and/or results")
-				}
+				expectedParams = []string{"name string", "age int"}
 			case "GetNameAndTelephone":
-				expectedParams := []string{}
-				expectedResults := []string{"name, telephone string"}
-				if !compareStrArrays(expectedParams, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("GetNameAndTelephone did not have the expected params and/or results")
-				}
+				expectedResults = []string{"name, telephone string"}
 			case "SetNameAndTelephone":
-				expectedParams := []string{"name, telephone string"}
-				expectedResults := []string{}
-				if !compareStrArrays(expectedParams, params, t) || !compareStrArrays(expectedResults, results, t) {
-					t.Fatalf("SetNameAndTelephone did not have the expected params and/or results")
-				}
+				expectedParams = []string{"name, telephone string"}
 			}
+			assert.Equalf(t, expectedParams, params, "%s must have the expected params", methodName)
+			assert.Equalf(t, expectedResults, results, "%s must have the expected results", methodName)
 		}
 	}
-}
-
-func compareStrArrays(actual []string, expected []string, t *testing.T) bool {
-	if len(actual) != len(expected) {
-		t.Logf("compareStrArrays received two different lengths of fields, expected:|%+v| was not equal to actual |%+v|. actual length:%d, expected length:%d", expected, actual, len(actual), len(expected))
-		return false
-	}
-	for i := 0; i < len(actual); i++ {
-		if actual[i] != expected[i] {
-			t.Logf("compareStrArrays expected:|%+v| was not equal to actual |%+v|", expected, actual)
-			return false
-		}
-	}
-	return true
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
 	_, _, typeDoc := ParseStruct(src, "Person", true, false)
-	mustBeEqual(typeDoc, "", t)
+	assert.Equal(t, "", typeDoc)
 }
 
 func TestMakeInterface(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff", methods, imports)
-	if err != nil {
-		t.Fatal("MakeInterface returned an error", err)
-	}
+	assert.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -226,14 +186,12 @@ type MyInterface interface {
 }
 `
 
-	mustBeEqual(string(b), expected, t)
+	assert.Equal(t, expected, string(b))
 }
 
 func TestMakeInterfaceMultiLineIfaceComment(t *testing.T) {
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", nil, nil)
-	if err != nil {
-		t.Fatal("MakeInterface returned an error", err)
-	}
+	assert.Nil(t, err, "MakeInterface returned an error:", err)
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -245,5 +203,5 @@ type MyInterface interface {
 }
 `
 
-	mustBeEqual(string(b), expected, t)
+	assert.Equal(t, expected, string(b))
 }
