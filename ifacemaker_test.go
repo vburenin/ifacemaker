@@ -189,6 +189,33 @@ type PersonIface interface {
 	assert.Equal(t, expected, out)
 }
 
+func TestMainNoCopyMethodDocs(t *testing.T) {
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package gen
+
+// PersonIface ...
+type PersonIface interface {
+	Name() string
+	SetName(name string)
+	Age() int
+	SetAge(age int) int
+	AgeAndName() (int, string)
+	SetAgeAndName(name string, age int)
+	GetNameAndTelephone() (name, telephone string)
+	SetNameAndTelephone(name, telephone string)
+}
+
+`
+
+	assert.Equal(t, expected, out)
+}
+
 // not thread safe
 func captureStdout(f func()) string {
 	old := os.Stdout

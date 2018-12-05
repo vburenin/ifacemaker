@@ -16,7 +16,7 @@ type cmdlineArgs struct {
 	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
 	IfaceComment string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
-	CopyDocs     string   `short:"d" long:"doc" description:"Copy docs from methods" option:"false"`
+	CopyDocs     string   `short:"d" long:"doc" description:"Copy docs from methods" option:"true" option:"false" default:"true"`
 	copyDocs     bool
 	CopyTypeDoc  bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
 	Comment      string `short:"c" long:"comment" description:"Append comment to top"`
@@ -34,7 +34,7 @@ func run(args cmdlineArgs) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, !args.copyDocs, args.CopyTypeDoc)
+		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -74,7 +74,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	args.copyDocs = args.CopyDocs != "false"
+	args.copyDocs = args.CopyDocs == "true"
 
 	if args.IfaceComment == "" {
 		args.IfaceComment = fmt.Sprintf("%s ...", args.IfaceName)
