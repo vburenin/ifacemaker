@@ -4,25 +4,30 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
-	"github.com/mkideal/cli"
+	flags "github.com/jessevdk/go-flags"
 	"github.com/vburenin/ifacemaker/maker"
 )
 
 type cmdlineArgs struct {
-	cli.Helper
-	Files        []string `cli:"*f,file" usage:"Go source file to read"`
-	StructType   string   `cli:"*s,struct" usage:"Generate an interface for this structure name"`
-	IfaceName    string   `cli:"*i,iface" usage:"Name of the generated interface"`
-	PkgName      string   `cli:"*p,pkg" usage:"Package name for the generated interface"`
-	IfaceComment string   `cli:"y,iface-comment" usage:"Comment for the interface, default is '// <iface> ...'"`
-	CopyDocs     bool     `cli:"d,doc" usage:"Copy docs from methods" dft:"true"`
-	CopyTypeDoc  bool     `cli:"D,type-doc" usage:"Copy type doc from struct"`
-	Comment      string   `cli:"c,comment" usage:"Append comment to top"`
-	Output       string   `cli:"o,output" usage:"Output file name. If not provided, result will be printed to stdout."`
+	Files        []string `short:"f" long:"file" description:"Go source file to read" required:"true"`
+	StructType   string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
+	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
+	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
+	IfaceComment string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
+
+	// jessevdk/go-flags doesn't support default values for boolean flags,
+	// so we use a string for backwards-compatibility and then convert it to a bool later.
+	CopyDocs string `short:"d" long:"doc" description:"Copy docs from methods" option:"true" option:"false" default:"true"`
+	copyDocs bool
+
+	CopyTypeDoc bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
+	Comment     string `short:"c" long:"comment" description:"Append comment to top"`
+	Output      string `short:"o" long:"output" description:"Output file name. If not provided, result will be printed to stdout."`
 }
 
-func run(args *cmdlineArgs) {
+func run(args cmdlineArgs) {
 	allMethods := []string{}
 	allImports := []string{}
 	mset := make(map[string]struct{})
@@ -33,7 +38,7 @@ func run(args *cmdlineArgs) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.CopyDocs, args.CopyTypeDoc)
+		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -68,12 +73,22 @@ func run(args *cmdlineArgs) {
 }
 
 func main() {
-	cli.Run(&cmdlineArgs{}, func(ctx *cli.Context) error {
-		argv := ctx.Argv().(*cmdlineArgs)
-		if argv.IfaceComment == "" {
-			argv.IfaceComment = fmt.Sprintf("%s ...", argv.IfaceName)
+	var args cmdlineArgs
+	_, err := flags.ParseArgs(&args, os.Args)
+	if err != nil {
+		if flags.WroteHelp(err) {
+			return
 		}
-		run(argv)
-		return nil
-	})
+		// No need to log the error, flags.ParseArgs() already does this
+		os.Exit(1)
+	}
+
+	// Workaround because jessevdk/go-flags doesn't support default values for boolean flags
+	args.copyDocs = args.CopyDocs == "true"
+
+	if args.IfaceComment == "" {
+		args.IfaceComment = fmt.Sprintf("%s ...", args.IfaceName)
+	}
+
+	run(args)
 }
