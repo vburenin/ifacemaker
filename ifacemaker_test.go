@@ -216,6 +216,52 @@ type PersonIface interface {
 	assert.Equal(t, expected, out)
 }
 
+func TestMainDoNotImportPackageName(t *testing.T) {
+	os.Args = []string{"cmd", "-f", "maker/test_impl.go", "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-N", "false", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package footest
+
+// TestInterface ...
+type TestInterface interface {
+	GetUser(userID string) *User
+	CreateUser(user *User) (*User, error)
+}
+
+`
+
+	assert.Equal(t, expected, out)
+}
+
+func TestMainImportPackageName(t *testing.T) {
+	os.Args = []string{"cmd", "-f", "maker/test_impl.go", "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package footest
+
+import (
+	"github.com/vburenin/ifacemaker/maker/footest"
+)
+
+// TestInterface ...
+type TestInterface interface {
+	GetUser(userID string) *footest.User
+	CreateUser(user *footest.User) (*footest.User, error)
+}
+
+`
+
+	assert.Equal(t, expected, out)
+}
+
 // not thread safe
 func captureStdout(f func()) string {
 	old := os.Stdout

@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"log"
+	"regexp"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -85,7 +86,7 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 // param or return value as a single string.
 // If the FieldList input is nil, it returns
 // nil
-func FormatFieldList(src []byte, fl *ast.FieldList) []string {
+func FormatFieldList(src []byte, fl *ast.FieldList, pkgRe *regexp.Regexp) []string {
 	if fl == nil {
 		return nil
 	}
@@ -96,6 +97,9 @@ func FormatFieldList(src []byte, fl *ast.FieldList) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
+		if pkgRe != nil {
+			t = pkgRe.ReplaceAllString(t, "")
+		}
 		if len(names) > 0 {
 			typeSharingArgs := strings.Join(names, ", ")
 			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))
@@ -167,7 +171,7 @@ func isMethodPrivate(name string) bool {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, importPkgName bool) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -182,14 +186,19 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		}
 	}
 
+	var pkgRe *regexp.Regexp
+	if !importPkgName {
+		pkgRe = regexp.MustCompile(fmt.Sprintf(`\b%s\.`, pkgName))
+	}
+
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			methodName := fd.Name.String()
 			if isMethodPrivate(methodName) {
 				continue
 			}
-			params := FormatFieldList(src, fd.Type.Params)
-			ret := FormatFieldList(src, fd.Type.Results)
+			params := FormatFieldList(src, fd.Type.Params, pkgRe)
+			ret := FormatFieldList(src, fd.Type.Results, pkgRe)
 			method := fmt.Sprintf("%s(%s) (%s)", methodName, strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {

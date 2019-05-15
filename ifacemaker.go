@@ -25,6 +25,9 @@ type cmdlineArgs struct {
 	CopyTypeDoc bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
 	Comment     string `short:"c" long:"comment" description:"Append comment to top"`
 	Output      string `short:"o" long:"output" description:"Output file name. If not provided, result will be printed to stdout."`
+
+	ImportSameName string `short:"N" long:"import-same-name" description:"Import types by the same name as the target package." option:"true" option:"false" default:"true"`
+	importSameName bool
 }
 
 func run(args cmdlineArgs) {
@@ -38,7 +41,7 @@ func run(args cmdlineArgs) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
+		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc, args.PkgName, args.importSameName)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -85,6 +88,7 @@ func main() {
 
 	// Workaround because jessevdk/go-flags doesn't support default values for boolean flags
 	args.copyDocs = args.CopyDocs == "true"
+	args.importSameName = args.ImportSameName == "true"
 
 	if args.IfaceComment == "" {
 		args.IfaceComment = fmt.Sprintf("%s ...", args.IfaceName)
