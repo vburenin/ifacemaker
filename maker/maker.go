@@ -149,12 +149,6 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	return FormatCode(code)
 }
 
-// isFunctionPrivate checks whether the starting
-// sign is lower case
-func isMethodPrivate(name string) bool {
-	return name[0] == '_' || (name[0] >= 'a' && name[0] <= 'z')
-}
-
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
 // interface on and a bool saying whether it should
@@ -184,13 +178,12 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
-			methodName := fd.Name.String()
-			if isMethodPrivate(methodName) {
+			if !fd.Name.IsExported() {
 				continue
 			}
 			params := FormatFieldList(src, fd.Type.Params)
 			ret := FormatFieldList(src, fd.Type.Results)
-			method := fmt.Sprintf("%s(%s) (%s)", methodName, strings.Join(params, ", "), strings.Join(ret, ", "))
+			method := fmt.Sprintf("%s(%s) (%s)", fd.Name.String(), strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
