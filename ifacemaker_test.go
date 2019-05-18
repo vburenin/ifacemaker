@@ -11,10 +11,6 @@ import (
 
 var src = `package main
 
-import (
-	"fmt"
-)
-
 // Person contains data related to a person.
 type Person struct {
 	name string
@@ -34,12 +30,13 @@ func (p *Person) SetName(name string) {
 
 // Age ...
 func (p *Person) Age() int {
-	return p.Age
+	return p.age
 }
 
 // Age ...
 func (p *Person) SetAge(age int) int {
-	p.Age = age
+	p.age = age
+	return age
 }
 
 // AgeAndName ...
