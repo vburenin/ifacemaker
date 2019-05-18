@@ -38,7 +38,10 @@ func run(args cmdlineArgs) {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
-		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
+		methods, imports, parsedTypeDoc, err := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)

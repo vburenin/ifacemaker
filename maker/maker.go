@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/doc"
+	"go/importer"
 	"go/parser"
 	"go/token"
-	"log"
+	"go/types"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -167,11 +168,17 @@ func isMethodPrivate(name string) bool {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool) (methods []Method, imports []string, typeDoc string, err error) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, nil, "", err
+	}
+
+	conf := types.Config{Importer: importer.Default()}
+	_, err = conf.Check("", fset, []*ast.File{a}, nil)
+	if err != nil {
+		return nil, nil, "", err
 	}
 
 	for _, i := range a.Imports {

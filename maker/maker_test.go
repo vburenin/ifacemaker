@@ -36,12 +36,12 @@ var (
 
 		// Age ...
 		func (p *Person) Age() int {
-		    return p.Age
+		    return p.age
 		}
 
 		// Age ...
 		func (p *Person) SetAge(age int) {
-		    p.Age = age
+		    p.age = age
 		}
 
 		// AgeAndName ...
@@ -67,7 +67,7 @@ var (
 		}
 
 		func SomeFunction() string {
-		    return "Something"
+		    return fmt.Sprintf("Some%s", "thing")
 		}`)
 )
 
@@ -83,7 +83,7 @@ func TestLines(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true)
+	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true)
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -161,7 +161,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false)
+	_, _, typeDoc, _ := ParseStruct(src, "Person", true, false)
 	assert.Equal(t, "", typeDoc)
 }
 
@@ -204,4 +204,58 @@ type MyInterface interface {
 `
 
 	assert.Equal(t, expected, string(b))
+}
+
+func TestParseStructValidatesInputCode(t *testing.T) {
+	tests := map[string]struct {
+		src  string
+		want string
+	}{
+		"unused import": {
+			src: `
+			package main
+	
+			import (
+				"fmt"
+			)
+	
+			type Person struct {}`,
+			want: `"fmt" imported but not used`,
+		},
+		"invalid assignment": {
+			src: `
+			package main
+	
+			type Person struct {
+				age int
+			}
+	
+			func (p *Person) Age() int {
+				return p.age
+			}
+	
+			func (p *Person) SetAge(age int) {
+				p.Age = age
+			}`,
+			want: "cannot assign to p.Age (value of type func() int)",
+		},
+		"valid source code": {
+			src: `
+			package main
+	
+			type Person struct {}`,
+			want: "",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, _, _, err := ParseStruct([]byte(tc.src), "Person", false, false)
+			if len(tc.want) > 0 {
+				assert.Contains(t, err.Error(), tc.want)
+			} else {
+				assert.Equal(t, err, nil)
+			}
+		})
+	}
 }
