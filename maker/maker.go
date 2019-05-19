@@ -6,6 +6,7 @@ import (
 	"go/doc"
 	"go/parser"
 	"go/token"
+	"io/ioutil"
 	"log"
 	"strings"
 
@@ -215,4 +216,45 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	}
 
 	return
+}
+
+func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment string, copyDocs, copyTypeDoc bool) ([]byte, error) {
+	allMethods := []string{}
+	allImports := []string{}
+	mset := make(map[string]struct{})
+	iset := make(map[string]struct{})
+	var typeDoc string
+	for _, f := range files {
+		src, err := ioutil.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc)
+		for _, m := range methods {
+			if _, ok := mset[m.Code]; !ok {
+				allMethods = append(allMethods, m.Lines()...)
+				mset[m.Code] = struct{}{}
+			}
+		}
+		for _, i := range imports {
+			if _, ok := iset[i]; !ok {
+				allImports = append(allImports, i)
+				iset[i] = struct{}{}
+			}
+		}
+		if typeDoc == "" {
+			typeDoc = parsedTypeDoc
+		}
+	}
+
+	if typeDoc != "" {
+		ifaceComment = fmt.Sprintf("%s\n%s", ifaceComment, typeDoc)
+	}
+
+	result, err := MakeInterface(comment, pkgName, ifaceName, ifaceComment, allMethods, allImports)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
