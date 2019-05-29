@@ -27,51 +27,6 @@ type cmdlineArgs struct {
 	Output      string `short:"o" long:"output" description:"Output file name. If not provided, result will be printed to stdout."`
 }
 
-func run(args cmdlineArgs) {
-	allMethods := []string{}
-	allImports := []string{}
-	mset := make(map[string]struct{})
-	iset := make(map[string]struct{})
-	var typeDoc string
-	for _, f := range args.Files {
-		src, err := ioutil.ReadFile(f)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-		methods, imports, parsedTypeDoc := maker.ParseStruct(src, args.StructType, args.copyDocs, args.CopyTypeDoc)
-		for _, m := range methods {
-			if _, ok := mset[m.Code]; !ok {
-				allMethods = append(allMethods, m.Lines()...)
-				mset[m.Code] = struct{}{}
-			}
-		}
-		for _, i := range imports {
-			if _, ok := iset[i]; !ok {
-				allImports = append(allImports, i)
-				iset[i] = struct{}{}
-			}
-		}
-		if typeDoc == "" {
-			typeDoc = parsedTypeDoc
-		}
-	}
-
-	if typeDoc != "" {
-		args.IfaceComment = fmt.Sprintf("%s\n%s", args.IfaceComment, typeDoc)
-	}
-
-	result, err := maker.MakeInterface(args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, allMethods, allImports)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	if args.Output == "" {
-		fmt.Println(string(result))
-	} else {
-		ioutil.WriteFile(args.Output, result, 0644)
-	}
-}
-
 func main() {
 	var args cmdlineArgs
 	_, err := flags.ParseArgs(&args, os.Args)
@@ -90,5 +45,14 @@ func main() {
 		args.IfaceComment = fmt.Sprintf("%s ...", args.IfaceName)
 	}
 
-	run(args)
+	result, err := maker.Make(args.Files, args.StructType, args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, args.copyDocs, args.CopyTypeDoc)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	if args.Output == "" {
+		fmt.Println(string(result))
+	} else {
+		ioutil.WriteFile(args.Output, result, 0644)
+	}
 }
