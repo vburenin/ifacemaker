@@ -48,7 +48,6 @@ func main() {
 	result, err := maker.Make(args.Files, args.StructType, args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, args.copyDocs, args.CopyTypeDoc)
 	if err != nil {
 		log.Fatal(err.Error())
-		os.Exit(1)
 	}
 
 	if args.Output == "" {
