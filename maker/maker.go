@@ -140,9 +140,11 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	output = append(output,
 		")",
 		"",
-		fmt.Sprintf("// %s", strings.Replace(ifaceComment, "\n", "\n// ", -1)),
-		fmt.Sprintf("type %s interface {", ifaceName),
 	)
+	if len(ifaceComment) > 0 {
+		output = append(output, fmt.Sprintf("// %s", strings.Replace(ifaceComment, "\n", "\n// ", -1)))
+	}
+	output = append(output, fmt.Sprintf("type %s interface {", ifaceName))
 	output = append(output, methods...)
 	output = append(output, "}")
 	code := strings.Join(output, "\n")
