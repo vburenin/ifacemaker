@@ -116,13 +116,6 @@ func TestGetReceiverTypeName(t *testing.T) {
 	assert.True(t, hasPersonFuncDecl, "Never registered a func decl with the `Person` receiver type")
 }
 
-func TestIsMethodPrivate(t *testing.T) {
-	functionNames := map[string]bool{"_someFunc": true, "herp": true, "_SomeFunc": true, "SomeFunc": false, "ZooFunc": false}
-	for name, expected := range functionNames {
-		assert.Equalf(t, expected, isMethodPrivate(name), "Function name %s != expected value %+v", name, expected)
-	}
-}
-
 func TestFormatFieldList(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
