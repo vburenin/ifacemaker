@@ -86,7 +86,7 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 // param or return value as a single string.
 // If the FieldList input is nil, it returns
 // nil
-func FormatFieldList(src []byte, fl *ast.FieldList) []string {
+func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string) []string {
 	if fl == nil {
 		return nil
 	}
@@ -97,6 +97,7 @@ func FormatFieldList(src []byte, fl *ast.FieldList) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
+		t = strings.ReplaceAll(t, pkgName+".", "")
 		if len(names) > 0 {
 			typeSharingArgs := strings.Join(names, ", ")
 			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))
@@ -164,7 +165,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -184,8 +185,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			if !fd.Name.IsExported() {
 				continue
 			}
-			params := FormatFieldList(src, fd.Type.Params)
-			ret := FormatFieldList(src, fd.Type.Results)
+			params := FormatFieldList(src, fd.Type.Params, pkgName)
+			ret := FormatFieldList(src, fd.Type.Results, pkgName)
 			method := fmt.Sprintf("%s(%s) (%s)", fd.Name.String(), strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
@@ -224,7 +225,7 @@ func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment 
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc)
+		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc, pkgName)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)

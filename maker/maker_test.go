@@ -83,7 +83,7 @@ func TestLines(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true)
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "")
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -124,8 +124,8 @@ func TestFormatFieldList(t *testing.T) {
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
 			methodName := fd.Name.String()
-			params := FormatFieldList(src, fd.Type.Params)
-			results := FormatFieldList(src, fd.Type.Results)
+			params := FormatFieldList(src, fd.Type.Params, "")
+			results := FormatFieldList(src, fd.Type.Results, "")
 
 			var expectedParams []string
 			var expectedResults []string
@@ -154,7 +154,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false)
+	_, _, typeDoc := ParseStruct(src, "Person", true, false, "")
 	assert.Equal(t, "", typeDoc)
 }
 
