@@ -98,10 +98,10 @@ type User struct {
 
 var srcFile = os.TempDir() + "/ifacemaker_src.go"
 var srcFile2 = os.TempDir() + "/test_impl.go"
-var srcFile3 = os.TempDir() + "footest/footest.go"
+var srcFile3 = os.TempDir() + "/footest/footest.go"
 
 func TestMain(m *testing.M) {
-	dirPath := os.TempDir() + "footest"
+	dirPath := os.TempDir() + "/footest"
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		err := os.Mkdir(dirPath, os.ModePerm)
 		if err != nil {
