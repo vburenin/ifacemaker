@@ -97,7 +97,7 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		t = strings.ReplaceAll(t, pkgName+".", "")
+		t = strings.Replace(t, pkgName+".", "", -1)
 		if len(names) > 0 {
 			typeSharingArgs := strings.Join(names, ", ")
 			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))
