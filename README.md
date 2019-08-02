@@ -20,7 +20,7 @@ Usage:
   ifacemaker [OPTIONS]
 
 Application Options:
-  -f, --file=          Go source file to read
+  -f, --file=          Go source file to read, either filename or glob
   -s, --struct=        Generate an interface for this structure name
   -i, --iface=         Name of the generated interface
   -p, --pkg=           Package name for the generated interface

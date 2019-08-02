@@ -5,13 +5,14 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 
-	flags "github.com/jessevdk/go-flags"
+	"github.com/jessevdk/go-flags"
 	"github.com/vburenin/ifacemaker/maker"
 )
 
 type cmdlineArgs struct {
-	Files        []string `short:"f" long:"file" description:"Go source file to read" required:"true"`
+	Files        []string `short:"f" long:"file" description:"Go source file to read, either filename or glob" required:"true"`
 	StructType   string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
 	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
@@ -44,8 +45,15 @@ func main() {
 	if args.IfaceComment == "" {
 		args.IfaceComment = fmt.Sprintf("%s ...", args.IfaceName)
 	}
-
-	result, err := maker.Make(args.Files, args.StructType, args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, args.copyDocs, args.CopyTypeDoc)
+	var files []string
+	for _, filePattern := range args.Files {
+		matches, err := filepath.Glob(filePattern)
+		if err != nil {
+			log.Fatal(err)
+		}
+		files = append(files, matches...)
+	}
+	result, err := maker.Make(files, args.StructType, args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, args.copyDocs, args.CopyTypeDoc)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

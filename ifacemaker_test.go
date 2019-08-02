@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	assert "github.com/stretchr/testify/assert"
@@ -89,6 +90,15 @@ func (s *TestImpl) fooHelper() string {
 	return ""
 }`
 
+var src2_extend = `package maker
+import (
+	"github.com/vburenin/ifacemaker/maker/footest"
+)
+
+func (s *TestImpl) UpdateUser(userID string) *footest.User {
+    return &footest.User{}, nil
+}
+`
 var src3 = `package footest
 
 type User struct {
@@ -98,6 +108,7 @@ type User struct {
 
 var srcFile = os.TempDir() + "/ifacemaker_src.go"
 var srcFile2 = os.TempDir() + "/test_impl.go"
+var srcFile2_ext = os.TempDir() + "/test_impl_extended.go"
 var srcFile3 = os.TempDir() + "/footest/footest.go"
 
 func TestMain(m *testing.M) {
@@ -110,6 +121,7 @@ func TestMain(m *testing.M) {
 	}
 	writeTestSourceFile(src, srcFile)
 	writeTestSourceFile(src2, srcFile2)
+	writeTestSourceFile(src2_extend, srcFile2_ext)
 	writeTestSourceFile(src3, srcFile3)
 
 	os.Exit(m.Run())
@@ -269,6 +281,32 @@ package footest
 type TestInterface interface {
 	GetUser(userID string) *User
 	CreateUser(user *User) (*User, error)
+}
+
+`
+
+	assert.Equal(t, expected, out)
+}
+
+func TestMainFileGlob(t *testing.T) {
+	src := strings.Replace(srcFile2, "test_impl.go", "test*.go", 1)
+	//assert.True(t, strings.HasSuffix(srcFile2, "test*.go"))
+	//assert.Equal(t, "bla", src)
+	//ssert.Contains(t, src, "test*")
+	os.Args = []string{"cmd", "-f", src, "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package footest
+
+// TestInterface ...
+type TestInterface interface {
+	GetUser(userID string) *User
+	CreateUser(user *User) (*User, error)
+	UpdateUser(userID string) *User
 }
 
 `
