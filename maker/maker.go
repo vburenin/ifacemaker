@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"io/ioutil"
 	"log"
+	"regexp"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -97,7 +98,10 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		t = strings.Replace(t, pkgName+".", "", -1)
+
+		regexString := fmt.Sprintf(`(\*|\(|\s|^)%s\.`, regexp.QuoteMeta(pkgName))
+		t = regexp.MustCompile(regexString).ReplaceAllString(t, "$1")
+
 		if len(names) > 0 {
 			typeSharingArgs := strings.Join(names, ", ")
 			parts = append(parts, fmt.Sprintf("%s %s", typeSharingArgs, t))

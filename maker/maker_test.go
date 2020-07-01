@@ -11,64 +11,86 @@ import (
 
 var (
 	src = []byte(`
-		package main
+	package main
 
-		import (
-		    "fmt"
-		)
-
-		// Person ...
-		type Person struct {
-		    name string
-		    age int
-		    telephone string
-		}
-
-		// Name ...
-		func (p *Person) Name() string {
-		    return p.name
-		}
-
-		// SetName ...
-		func (p *Person) SetName(name string) {
-		    p.name = name
-		}
-
-		// Age ...
-		func (p *Person) Age() int {
-		    return p.Age
-		}
-
-		// Age ...
-		func (p *Person) SetAge(age int) {
-		    p.Age = age
-		}
-
-		// AgeAndName ...
-		func (p *Person) AgeAndName() (int, string) {
-		    return p.age, p.name
-		}
-
-		func (p *Person) SetAgeAndName(name string, age int) {
-		    p.name = name
-		    p.age = age
-		}
-
-		// TelephoneAndName ...
-		func (p *Person) GetNameAndTelephone() (name, telephone string) {
-		    telephone = p.telephone
-		    name = p.name 
-		    return
-		}
-
-		func (p *Person) SetNameAndTelephone(name, telephone string) {
-		    p.name = name
-		    p.telephone = telephone
-		}
-
-		func SomeFunction() string {
-		    return "Something"
-		}`)
+	import (
+		notmain "fmt"
+	)
+	
+	// Person ...
+	type Person struct {
+		name string
+		age int
+		telephone string
+		noPointer notmain.Formatter
+		pointer *notmain.Formatter
+	}
+	
+	// Name ...
+	func (p *Person) Name() string {
+		return p.name
+	}
+	
+	// SetName ...
+	func (p *Person) SetName(name string) {
+		p.name = name
+	}
+	
+	// Age ...
+	func (p *Person) Age() int {
+		return p.Age
+	}
+	
+	// Age ...
+	func (p *Person) SetAge(age int) {
+		p.Age = age
+	}
+	
+	// AgeAndName ...
+	func (p *Person) AgeAndName() (int, string) {
+		return p.age, p.name
+	}
+	
+	func (p *Person) SetAgeAndName(name string, age int) {
+		p.name = name
+		p.age = age
+	}
+	
+	// TelephoneAndName ...
+	func (p *Person) GetNameAndTelephone() (name, telephone string) {
+		telephone = p.telephone
+		name = p.name
+		return
+	}
+	
+	func (p *Person) SetNameAndTelephone(name, telephone string) {
+		p.name = name
+		p.telephone = telephone
+	}
+	
+	func (p *Person) ReturnPointer() *notmain.Formatter {
+		return nil
+	}
+	
+	func (p *Person) ReturnNoPointer() notmain.Formatter {
+		return nil
+	}
+	
+	func (p *Person) ArgumentNoPointer(formatter notmain.Formatter)  {
+	
+	}
+	
+	func (p *Person) ArgumentPointer(formatter *notmain.Formatter)  {
+	
+	}
+	
+	func (p *Person) SecondArgumentPointer(abc int, formatter *notmain.Formatter)  {
+	
+	}
+	
+	func SomeFunction() string {
+		return "Something"
+	}`)
 )
 
 func TestLines(t *testing.T) {
@@ -90,7 +112,7 @@ func TestParseStruct(t *testing.T) {
 	imp := imports[0]
 	trimmedImp := strings.TrimSpace(imp)
 
-	assert.Equal(t, `"fmt"`, trimmedImp)
+	assert.Equal(t, `notmain "fmt"`, trimmedImp)
 	assert.Equal(t, "Person ...", typeDoc)
 }
 
@@ -124,8 +146,8 @@ func TestFormatFieldList(t *testing.T) {
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
 			methodName := fd.Name.String()
-			params := FormatFieldList(src, fd.Type.Params, "")
-			results := FormatFieldList(src, fd.Type.Results, "")
+			params := FormatFieldList(src, fd.Type.Params, "main")
+			results := FormatFieldList(src, fd.Type.Results, "main")
 
 			var expectedParams []string
 			var expectedResults []string
@@ -146,6 +168,16 @@ func TestFormatFieldList(t *testing.T) {
 				expectedResults = []string{"name, telephone string"}
 			case "SetNameAndTelephone":
 				expectedParams = []string{"name, telephone string"}
+			case "ReturnPointer":
+				expectedResults = []string{"*notmain.Formatter"}
+			case "ReturnNoPointer":
+				expectedResults = []string{"notmain.Formatter"}
+			case "ArgumentNoPointer":
+				expectedParams = []string{"formatter notmain.Formatter"}
+			case "ArgumentPointer":
+				expectedParams = []string{"formatter *notmain.Formatter"}
+			case "SecondArgumentPointer":
+				expectedParams = []string{"abc int", "formatter *notmain.Formatter"}
 			}
 			assert.Equalf(t, expectedParams, params, "%s must have the expected params", methodName)
 			assert.Equalf(t, expectedResults, results, "%s must have the expected results", methodName)
