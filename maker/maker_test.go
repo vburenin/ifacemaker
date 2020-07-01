@@ -112,7 +112,7 @@ func TestParseStruct(t *testing.T) {
 	imp := imports[0]
 	trimmedImp := strings.TrimSpace(imp)
 
-	assert.Equal(t, `"fmt"`, trimmedImp)
+	assert.Equal(t, `notmain "fmt"`, trimmedImp)
 	assert.Equal(t, "Person ...", typeDoc)
 }
 
