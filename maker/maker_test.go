@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	assert "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -90,7 +90,10 @@ var (
 	
 	func SomeFunction() string {
 		return "Something"
-	}`)
+	}
+
+	type SomeType struct {}`)
+
 )
 
 func TestLines(t *testing.T) {
@@ -104,8 +107,22 @@ func TestLines(t *testing.T) {
 	assert.Equal(t, "func TestMethod() string {return \"I am great\"}", lines[1])
 }
 
+func TestParseDeclaredTypes(t *testing.T) {
+	declaredTypes := ParseDeclaredTypes(src)
+	assert.Equal(t, declaredType{
+		Name:    "Person",
+		Package: "main",
+	},
+	declaredTypes[0])
+	assert.Equal(t, declaredType{
+		Name:    "SomeType",
+		Package: "main",
+	},
+		declaredTypes[1])
+}
+
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "")
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil)
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -146,8 +163,8 @@ func TestFormatFieldList(t *testing.T) {
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
 			methodName := fd.Name.String()
-			params := FormatFieldList(src, fd.Type.Params, "main")
-			results := FormatFieldList(src, fd.Type.Results, "main")
+			params := FormatFieldList(src, fd.Type.Params, "main", nil)
+			results := FormatFieldList(src, fd.Type.Results, "main", nil)
 
 			var expectedParams []string
 			var expectedResults []string
@@ -186,7 +203,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false, "")
+	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil)
 	assert.Equal(t, "", typeDoc)
 }
 

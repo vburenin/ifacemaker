@@ -21,6 +21,18 @@ type Method struct {
 	Docs []string
 }
 
+// declaredType identifies the name and package of a type declaration.
+type declaredType  struct {
+	Name string
+	Package string
+}
+
+// Fullname returns a scoped Package.Name string out of this declaredType.
+func (dt declaredType) Fullname() string {
+	return fmt.Sprintf("%s.%s", dt.Package, dt.Name)
+}
+
+
 // Lines return a []string consisting of
 // the documentation and code appended
 // in chronological order
@@ -29,6 +41,31 @@ func (m *Method) Lines() []string {
 	lines = append(lines, m.Docs...)
 	lines = append(lines, m.Code)
 	return lines
+}
+
+// GetTypeDeclarationName extract the name of the type of this declaration if it refers to a type declaration.
+// Otherwise, it returns an empty string.
+func GetTypeDeclarationName(decl ast.Decl) string {
+	gd, ok := decl.(*ast.GenDecl)
+	if !ok {
+		return ""
+	}
+
+	if gd.Tok != token.TYPE {
+		return ""
+	}
+
+	typeName := ""
+	for _, spec := range gd.Specs {
+		typeSpec, ok := spec.(*ast.TypeSpec)
+		if !ok {
+			return ""
+		}
+		typeName = typeSpec.Name.Name
+		break  // assuming first value is the good one.
+	}
+
+	return typeName
 }
 
 // GetReceiverTypeName takes in the entire
@@ -47,7 +84,7 @@ func (m *Method) Lines() []string {
 //
 // Behavior is undefined for a src []byte that
 // isn't the source of the possible FuncDecl fl
-func GetReceiverTypeName(src []byte, fl interface{}) (string, *ast.FuncDecl) {
+func GetReceiverTypeName(src []byte, fl ast.Decl) (string, *ast.FuncDecl) {
 	fd, ok := fl.(*ast.FuncDecl)
 	if !ok {
 		return "", nil
@@ -87,7 +124,7 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 // param or return value as a single string.
 // If the FieldList input is nil, it returns
 // nil
-func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string) []string {
+func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredTypes []declaredType) []string {
 	if fl == nil {
 		return nil
 	}
@@ -98,6 +135,16 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string) []string {
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
+
+		if declaredTypes != nil {
+			for _, dt := range declaredTypes {
+				if t == dt.Name && pkgName != dt.Package {
+					// The type of this field is the same as one declared in the source package,
+					// and the source package is not the same as the destination package.
+					t = dt.Fullname()
+				}
+			}
+		}
 
 		regexString := fmt.Sprintf(`(\*|\(|\s|^)%s\.`, regexp.QuoteMeta(pkgName))
 		t = regexp.MustCompile(regexString).ReplaceAllString(t, "$1")
@@ -157,6 +204,36 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	return FormatCode(code)
 }
 
+
+
+// ParseDeclaredTypes inspect given src code to find type declaractions.
+func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
+	fset := token.NewFileSet()
+	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	sourcePackageName := a.Name.Name
+
+	name := ""
+	for _, d := range a.Decls {
+		name = GetTypeDeclarationName(d)
+		if name != "" {
+			declaredTypes = append(declaredTypes, declaredType{
+				Name: name,
+				Package: sourcePackageName,
+			})
+		}
+	}
+
+	return
+}
+
+
+
+
+
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
 // interface on and a bool saying whether it should
@@ -169,7 +246,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -189,8 +266,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			if !fd.Name.IsExported() {
 				continue
 			}
-			params := FormatFieldList(src, fd.Type.Params, pkgName)
-			ret := FormatFieldList(src, fd.Type.Results, pkgName)
+			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
+			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
 			method := fmt.Sprintf("%s(%s) (%s)", fd.Name.String(), strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
@@ -221,15 +298,36 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment string, copyDocs, copyTypeDoc bool) ([]byte, error) {
 	allMethods := []string{}
 	allImports := []string{}
+	allDeclaredTypes := []declaredType{}
+
 	mset := make(map[string]struct{})
 	iset := make(map[string]struct{})
+	tset := make(map[string]struct{})
+
 	var typeDoc string
+
+	// First pass on all files to find declared types
 	for _, f := range files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc, pkgName)
+		types := ParseDeclaredTypes(src)
+		for _, t := range types {
+			if _, ok := tset[t.Fullname()]; !ok {
+				allDeclaredTypes = append(allDeclaredTypes, t)
+				tset[t.Fullname()] = struct{}{}
+			}
+		}
+	}
+
+	// Second pass to build up the interface
+	for _, f := range files {
+		src, err := ioutil.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc, pkgName, allDeclaredTypes)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -258,3 +356,4 @@ func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment 
 
 	return result, nil
 }
+
