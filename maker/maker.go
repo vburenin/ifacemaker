@@ -135,7 +135,7 @@ func FormatCode(code string) ([]byte, error) {
 // to an array, joins this array to a string
 // with newline and passes it on to FormatCode
 // which then directly returns the result
-func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []string, imports []string) ([]byte, error) {
+func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []string, imports []string) string {
 	output := []string{
 		"// " + comment,
 		"",
@@ -153,8 +153,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	output = append(output, fmt.Sprintf("type %s interface {", ifaceName))
 	output = append(output, methods...)
 	output = append(output, "}")
-	code := strings.Join(output, "\n")
-	return FormatCode(code)
+	return strings.Join(output, "\n")
 }
 
 // ParseStruct takes in a piece of source code as a
@@ -218,7 +217,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	return
 }
 
-func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment string, copyDocs, copyTypeDoc bool) ([]byte, error) {
+func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment string, copyDocs, copyTypeDoc bool, format string) ([]byte, error) {
 	allMethods := []string{}
 	allImports := []string{}
 	mset := make(map[string]struct{})
@@ -251,10 +250,11 @@ func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment 
 		ifaceComment = fmt.Sprintf("%s\n%s", ifaceComment, typeDoc)
 	}
 
-	result, err := MakeInterface(comment, pkgName, ifaceName, ifaceComment, allMethods, allImports)
-	if err != nil {
-		return nil, err
+	code := MakeInterface(comment, pkgName, ifaceName, ifaceComment, allMethods, allImports)
+	switch format {
+	case "imports":
+		return FormatCode(code)
+	default:
+		return []byte(code), nil
 	}
-
-	return result, nil
 }
