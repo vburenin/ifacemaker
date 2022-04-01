@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/jessevdk/go-flags"
+
 	"github.com/vburenin/ifacemaker/maker"
 )
 
@@ -17,6 +18,7 @@ type cmdlineArgs struct {
 	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
 	IfaceComment string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
+	ImportModule string   `short:"m" long:"import-module" description:"Fully qualified module import for packages with a different target package '// <iface> ...'"`
 
 	// jessevdk/go-flags doesn't support default values for boolean flags,
 	// so we use a string for backwards-compatibility and then convert it to a bool later.
@@ -58,7 +60,17 @@ func main() {
 		}
 		files = append(files, matches...)
 	}
-	result, err := maker.Make(files, args.StructType, args.Comment, args.PkgName, args.IfaceName, args.IfaceComment, args.copyDocs, args.CopyTypeDoc)
+	result, err := maker.Make(maker.MakeOptions{
+		Files:        files,
+		StructType:   args.StructType,
+		Comment:      args.Comment,
+		PkgName:      args.PkgName,
+		IfaceName:    args.IfaceName,
+		IfaceComment: args.IfaceComment,
+		CopyDocs:     args.copyDocs,
+		CopyTypeDoc:  args.CopyTypeDoc,
+		ImportModule: args.ImportModule,
+	})
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -66,6 +78,8 @@ func main() {
 	if args.Output == "" {
 		fmt.Println(string(result))
 	} else {
-		ioutil.WriteFile(args.Output, result, 0644)
+		if err := ioutil.WriteFile(args.Output, result, 0644); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

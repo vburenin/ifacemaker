@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/imports"
@@ -22,8 +23,8 @@ type Method struct {
 }
 
 // declaredType identifies the name and package of a type declaration.
-type declaredType  struct {
-	Name string
+type declaredType struct {
+	Name    string
 	Package string
 }
 
@@ -31,7 +32,6 @@ type declaredType  struct {
 func (dt declaredType) Fullname() string {
 	return fmt.Sprintf("%s.%s", dt.Package, dt.Name)
 }
-
 
 // Lines return a []string consisting of
 // the documentation and code appended
@@ -62,7 +62,7 @@ func GetTypeDeclarationName(decl ast.Decl) string {
 			return ""
 		}
 		typeName = typeSpec.Name.Name
-		break  // assuming first value is the good one.
+		break // assuming first value is the good one.
 	}
 
 	return typeName
@@ -204,8 +204,6 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 	return FormatCode(code)
 }
 
-
-
 // ParseDeclaredTypes inspect given src code to find type declaractions.
 func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 	fset := token.NewFileSet()
@@ -221,7 +219,7 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 		name = GetTypeDeclarationName(d)
 		if name != "" {
 			declaredTypes = append(declaredTypes, declaredType{
-				Name: name,
+				Name:    name,
 				Package: sourcePackageName,
 			})
 		}
@@ -229,10 +227,6 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 
 	return
 }
-
-
-
-
 
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
@@ -246,7 +240,7 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -259,6 +253,10 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		} else {
 			imports = append(imports, fmt.Sprintf("%s", i.Path.Value))
 		}
+	}
+
+	if importModule != "" {
+		imports = append(imports, fmt.Sprintf(". %s", strconv.Quote(importModule)))
 	}
 
 	for _, d := range a.Decls {
@@ -295,19 +293,34 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	return
 }
 
-func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment string, copyDocs, copyTypeDoc bool) ([]byte, error) {
-	allMethods := []string{}
-	allImports := []string{}
-	allDeclaredTypes := []declaredType{}
+// MakeOptions contains options for the Make function.
+type MakeOptions struct {
+	Files        []string
+	StructType   string
+	Comment      string
+	PkgName      string
+	IfaceName    string
+	IfaceComment string
+	ImportModule string
+	CopyDocs     bool
+	CopyTypeDoc  bool
+}
 
-	mset := make(map[string]struct{})
-	iset := make(map[string]struct{})
-	tset := make(map[string]struct{})
+func Make(options MakeOptions) ([]byte, error) {
+	var (
+		allMethods       []string
+		allImports       []string
+		allDeclaredTypes []declaredType
+
+		mset = make(map[string]struct{})
+		iset = make(map[string]struct{})
+		tset = make(map[string]struct{})
+	)
 
 	var typeDoc string
 
 	// First pass on all files to find declared types
-	for _, f := range files {
+	for _, f := range options.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			return nil, err
@@ -322,12 +335,12 @@ func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment 
 	}
 
 	// Second pass to build up the interface
-	for _, f := range files {
+	for _, f := range options.Files {
 		src, err := ioutil.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, structType, copyDocs, copyTypeDoc, pkgName, allDeclaredTypes)
+		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule)
 		for _, m := range methods {
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
@@ -346,14 +359,13 @@ func Make(files []string, structType, comment, pkgName, ifaceName, ifaceComment 
 	}
 
 	if typeDoc != "" {
-		ifaceComment = fmt.Sprintf("%s\n%s", ifaceComment, typeDoc)
+		options.IfaceComment = fmt.Sprintf("%s\n%s", options.IfaceComment, typeDoc)
 	}
 
-	result, err := MakeInterface(comment, pkgName, ifaceName, ifaceComment, allMethods, allImports)
+	result, err := MakeInterface(options.Comment, options.PkgName, options.IfaceName, options.IfaceComment, allMethods, allImports)
 	if err != nil {
 		return nil, err
 	}
 
 	return result, nil
 }
-

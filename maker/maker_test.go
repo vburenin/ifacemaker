@@ -93,7 +93,6 @@ var (
 	}
 
 	type SomeType struct {}`)
-
 )
 
 func TestLines(t *testing.T) {
@@ -113,7 +112,7 @@ func TestParseDeclaredTypes(t *testing.T) {
 		Name:    "Person",
 		Package: "main",
 	},
-	declaredTypes[0])
+		declaredTypes[0])
 	assert.Equal(t, declaredType{
 		Name:    "SomeType",
 		Package: "main",
@@ -122,7 +121,7 @@ func TestParseDeclaredTypes(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil)
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "")
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -130,6 +129,19 @@ func TestParseStruct(t *testing.T) {
 	trimmedImp := strings.TrimSpace(imp)
 
 	assert.Equal(t, `notmain "fmt"`, trimmedImp)
+	assert.Equal(t, "Person ...", typeDoc)
+}
+
+func TestParseStructWithImportModule(t *testing.T) {
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test")
+
+	assert.Equal(t, "Name() (string)", methods[0].Code)
+
+	imp, module := imports[0], imports[1]
+	trimmedImp := strings.TrimSpace(imp)
+
+	assert.Equal(t, `notmain "fmt"`, trimmedImp)
+	assert.Equal(t, `. "github.com/test/test"`, module)
 	assert.Equal(t, "Person ...", typeDoc)
 }
 
@@ -203,7 +215,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil)
+	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "")
 	assert.Equal(t, "", typeDoc)
 }
 
