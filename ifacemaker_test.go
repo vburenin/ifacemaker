@@ -106,10 +106,22 @@ type User struct {
 	Name string
 }`
 
+var src4 = `package footest
+
+// Hammer is in the same package but in a different file.
+type Smiter struct {
+	options Options
+}
+func (s *Smiter) Smite(weapon Hammer) error {
+	return nil
+}
+`
+
 var srcFile = os.TempDir() + "/ifacemaker_src.go"
 var srcFile2 = os.TempDir() + "/test_impl.go"
 var srcFile2_ext = os.TempDir() + "/test_impl_extended.go"
 var srcFile3 = os.TempDir() + "/footest/footest.go"
+var srcFile4 = os.TempDir() + "/footest/smiter.go"
 
 func TestMain(m *testing.M) {
 	dirPath := os.TempDir() + "/footest"
@@ -123,6 +135,7 @@ func TestMain(m *testing.M) {
 	writeTestSourceFile(src2, srcFile2)
 	writeTestSourceFile(src2_extend, srcFile2_ext)
 	writeTestSourceFile(src3, srcFile3)
+	writeTestSourceFile(src4, srcFile4)
 
 	os.Exit(m.Run())
 }
@@ -328,6 +341,30 @@ package footest
 type TestInterface interface {
 	GetUser(userID string) *User
 	CreateUser(user *User) (*User, error)
+}
+
+`
+
+	assert.Equal(t, expected, out)
+}
+
+func TestMainUsingDeclarationInSamePackage(t *testing.T) {
+	os.Args = []string{"cmd", "-f", srcFile4, "-m", "github.com/test/footest", "-s", "Smiter", "-i", "Smiter", "-p", "another", "-c", "DO NOT EDIT: Auto generated", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package another
+
+import (
+	. "github.com/test/footest"
+)
+
+// Smiter ...
+type Smiter interface {
+	Smite(weapon Hammer) error
 }
 
 `
