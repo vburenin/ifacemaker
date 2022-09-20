@@ -104,3 +104,10 @@ parameter:
 $ ifacemaker -f human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated" -o humaniface.go
 $
 ```
+
+You can also run it with `Docker`:
+
+```
+$ docker run --rm -v $(pwd):/tmp/ vburenin/ifacemaker -f /tmp/human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated" -o /tmp/humaniface.go
+$
+```
