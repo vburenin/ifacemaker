@@ -18,6 +18,7 @@ import (
 // Method describes the code and documentation
 // tied into a method
 type Method struct {
+	Name string
 	Code string
 	Docs []string
 }
@@ -266,7 +267,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			}
 			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
-			method := fmt.Sprintf("%s(%s) (%s)", fd.Name.String(), strings.Join(params, ", "), strings.Join(ret, ", "))
+			mName := fd.Name.String()
+			method := fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
@@ -274,6 +276,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				}
 			}
 			methods = append(methods, Method{
+				Name: mName,
 				Code: method,
 				Docs: docs,
 			})
