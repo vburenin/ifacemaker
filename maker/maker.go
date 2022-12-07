@@ -298,15 +298,16 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 
 // MakeOptions contains options for the Make function.
 type MakeOptions struct {
-	Files        []string
-	StructType   string
-	Comment      string
-	PkgName      string
-	IfaceName    string
-	IfaceComment string
-	ImportModule string
-	CopyDocs     bool
-	CopyTypeDoc  bool
+	Files          []string
+	StructType     string
+	Comment        string
+	PkgName        string
+	IfaceName      string
+	IfaceComment   string
+	ImportModule   string
+	CopyDocs       bool
+	CopyTypeDoc    bool
+	ExcludeMethods []string
 }
 
 func Make(options MakeOptions) ([]byte, error) {
@@ -337,6 +338,11 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 	}
 
+	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
+	for _, mName := range options.ExcludeMethods {
+		excludedMethods[mName] = struct{}{}
+	}
+
 	// Second pass to build up the interface
 	for _, f := range options.Files {
 		src, err := ioutil.ReadFile(f)
@@ -345,6 +351,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule)
 		for _, m := range methods {
+			if _, ok := excludedMethods[m.Name]; ok {
+				continue
+			}
+
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
 				mset[m.Code] = struct{}{}
