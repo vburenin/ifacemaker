@@ -13,12 +13,13 @@ import (
 )
 
 type cmdlineArgs struct {
-	Files        []string `short:"f" long:"file" description:"Go source file to read, either filename or glob" required:"true"`
-	StructType   string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
-	IfaceName    string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
-	PkgName      string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
-	IfaceComment string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
-	ImportModule string   `short:"m" long:"import-module" description:"Fully qualified module import for packages with a different target package '// <iface> ...'"`
+	Files          []string `short:"f" long:"file" description:"Go source file to read, either filename or glob" required:"true"`
+	StructType     string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
+	IfaceName      string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
+	PkgName        string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
+	IfaceComment   string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
+	ImportModule   string   `short:"m" long:"import-module" description:"Fully qualified module import for packages with a different target package '// <iface> ...'"`
+	ExcludeMethods []string `short:"e" long:"exclude-method" description:"Name of method that will be excluded from output interface"`
 
 	// jessevdk/go-flags doesn't support default values for boolean flags,
 	// so we use a string for backwards-compatibility and then convert it to a bool later.
@@ -61,15 +62,16 @@ func main() {
 		files = append(files, matches...)
 	}
 	result, err := maker.Make(maker.MakeOptions{
-		Files:        files,
-		StructType:   args.StructType,
-		Comment:      args.Comment,
-		PkgName:      args.PkgName,
-		IfaceName:    args.IfaceName,
-		IfaceComment: args.IfaceComment,
-		CopyDocs:     args.copyDocs,
-		CopyTypeDoc:  args.CopyTypeDoc,
-		ImportModule: args.ImportModule,
+		Files:          files,
+		StructType:     args.StructType,
+		Comment:        args.Comment,
+		PkgName:        args.PkgName,
+		IfaceName:      args.IfaceName,
+		IfaceComment:   args.IfaceComment,
+		CopyDocs:       args.copyDocs,
+		CopyTypeDoc:    args.CopyTypeDoc,
+		ImportModule:   args.ImportModule,
+		ExcludeMethods: args.ExcludeMethods,
 	})
 	if err != nil {
 		log.Fatal(err.Error())
