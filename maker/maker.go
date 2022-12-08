@@ -18,6 +18,7 @@ import (
 // Method describes the code and documentation
 // tied into a method
 type Method struct {
+	Name string
 	Code string
 	Docs []string
 }
@@ -266,7 +267,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			}
 			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
-			method := fmt.Sprintf("%s(%s) (%s)", fd.Name.String(), strings.Join(params, ", "), strings.Join(ret, ", "))
+			mName := fd.Name.String()
+			method := fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
@@ -274,6 +276,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				}
 			}
 			methods = append(methods, Method{
+				Name: mName,
 				Code: method,
 				Docs: docs,
 			})
@@ -295,15 +298,16 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 
 // MakeOptions contains options for the Make function.
 type MakeOptions struct {
-	Files        []string
-	StructType   string
-	Comment      string
-	PkgName      string
-	IfaceName    string
-	IfaceComment string
-	ImportModule string
-	CopyDocs     bool
-	CopyTypeDoc  bool
+	Files          []string
+	StructType     string
+	Comment        string
+	PkgName        string
+	IfaceName      string
+	IfaceComment   string
+	ImportModule   string
+	CopyDocs       bool
+	CopyTypeDoc    bool
+	ExcludeMethods []string
 }
 
 func Make(options MakeOptions) ([]byte, error) {
@@ -334,6 +338,11 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 	}
 
+	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
+	for _, mName := range options.ExcludeMethods {
+		excludedMethods[mName] = struct{}{}
+	}
+
 	// Second pass to build up the interface
 	for _, f := range options.Files {
 		src, err := ioutil.ReadFile(f)
@@ -342,6 +351,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule)
 		for _, m := range methods {
+			if _, ok := excludedMethods[m.Name]; ok {
+				continue
+			}
+
 			if _, ok := mset[m.Code]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
 				mset[m.Code] = struct{}{}
