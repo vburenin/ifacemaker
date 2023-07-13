@@ -87,7 +87,15 @@ var (
 	func (p *Person) SecondArgumentPointer(abc int, formatter *notmain.Formatter)  {
 	
 	}
-	
+
+	func (p *Person) unexportedFuncOne() bool {
+		return true
+	}
+
+	func (p *Person) unexportedFuncTwo() string {
+		return "hi!"
+	}
+
 	func SomeFunction() string {
 		return "Something"
 	}
@@ -121,7 +129,7 @@ func TestParseDeclaredTypes(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "")
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "", false)
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -133,7 +141,7 @@ func TestParseStruct(t *testing.T) {
 }
 
 func TestParseStructWithImportModule(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test")
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false)
 
 	assert.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -143,6 +151,24 @@ func TestParseStructWithImportModule(t *testing.T) {
 	assert.Equal(t, `notmain "fmt"`, trimmedImp)
 	assert.Equal(t, `. "github.com/test/test"`, module)
 	assert.Equal(t, "Person ...", typeDoc)
+}
+
+func TestParseStructWithNotExported(t *testing.T) {
+	methods, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true)
+
+	var oneExists, twoExists bool
+	for _, method := range methods {
+		if method.Code == "unexportedFuncOne() (bool)" {
+			oneExists = true
+		}
+
+		if method.Code == "unexportedFuncTwo() (string)" {
+			twoExists = true
+		}
+	}
+
+	assert.True(t, oneExists)
+	assert.True(t, twoExists)
 }
 
 func TestGetReceiverTypeName(t *testing.T) {
@@ -215,7 +241,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "")
+	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "", false)
 	assert.Equal(t, "", typeDoc)
 }
 
