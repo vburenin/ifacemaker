@@ -241,7 +241,7 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -262,7 +262,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
-			if !fd.Name.IsExported() {
+			if !withNotExported && !fd.Name.IsExported() {
 				continue
 			}
 			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
@@ -298,16 +298,17 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 
 // MakeOptions contains options for the Make function.
 type MakeOptions struct {
-	Files          []string
-	StructType     string
-	Comment        string
-	PkgName        string
-	IfaceName      string
-	IfaceComment   string
-	ImportModule   string
-	CopyDocs       bool
-	CopyTypeDoc    bool
-	ExcludeMethods []string
+	Files           []string
+	StructType      string
+	Comment         string
+	PkgName         string
+	IfaceName       string
+	IfaceComment    string
+	ImportModule    string
+	CopyDocs        bool
+	CopyTypeDoc     bool
+	ExcludeMethods  []string
+	WithNotExported bool
 }
 
 func Make(options MakeOptions) ([]byte, error) {
@@ -349,7 +350,7 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule)
+		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported)
 		for _, m := range methods {
 			if _, ok := excludedMethods[m.Name]; ok {
 				continue
