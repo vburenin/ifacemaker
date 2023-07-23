@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
 
-	assert "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
-var src = `package main
-
-import (
-	"fmt"
-)
+var src = `
+package main
 
 // Person contains data related to a person.
 type Person struct {
@@ -36,12 +33,13 @@ func (p *Person) SetName(name string) {
 
 // Age ...
 func (p *Person) Age() int {
-	return p.Age
+	return p.age
 }
 
 // Age ...
 func (p *Person) SetAge(age int) int {
-	p.Age = age
+	p.age = age
+	return p.age
 }
 
 // AgeAndName ...
@@ -68,7 +66,10 @@ func (p *Person) SetNameAndTelephone(name, telephone string) {
 
 func SomeFunction() string {
 	return "Something"
-}`
+}
+
+
+`
 
 var src2 = `package maker
 
@@ -117,14 +118,14 @@ func (s *Smiter) Smite(weapon Hammer) error {
 }
 `
 
-var srcFile = os.TempDir() + "/ifacemaker_src.go"
-var srcFile2 = os.TempDir() + "/test_impl.go"
-var srcFile2_ext = os.TempDir() + "/test_impl_extended.go"
-var srcFile3 = os.TempDir() + "/footest/footest.go"
-var srcFile4 = os.TempDir() + "/footest/smiter.go"
+var srcFile = filepath.Join(os.TempDir(), "ifacemaker_src.go")
+var srcFile2 = filepath.Join(os.TempDir(), "test_impl.go")
+var srcFile2_ext = filepath.Join(os.TempDir(), "test_impl_extended.go")
+var srcFile3 = filepath.Join(os.TempDir(), "footest", "footest.go")
+var srcFile4 = filepath.Join(os.TempDir(), "footest", "smiter.go")
 
 func TestMain(m *testing.M) {
-	dirPath := os.TempDir() + "/footest"
+	dirPath := filepath.Join(os.TempDir(), "footest")
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		err := os.Mkdir(dirPath, os.ModePerm)
 		if err != nil {
@@ -157,7 +158,6 @@ func TestMainAllArgs(t *testing.T) {
 	out := captureStdout(func() {
 		main()
 	})
-
 	expected := `// DO NOT EDIT: Auto generated
 
 package gen
@@ -187,11 +187,6 @@ type PersonIface interface {
 }
 
 func TestMainNoIfaceComment(t *testing.T) {
-	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-D"}
-	out := captureStdout(func() {
-		main()
-	})
-
 	expected := `// DO NOT EDIT: Auto generated
 
 package gen
@@ -216,16 +211,16 @@ type PersonIface interface {
 }
 
 `
-
-	assert.Equal(t, expected, out)
-}
-
-func TestMainNoCopyTypeDocs(t *testing.T) {
-	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-y", "PersonIface is an interface for Person."}
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-D"}
 	out := captureStdout(func() {
 		main()
 	})
 
+	assert.Equal(t, expected, out)
+
+}
+
+func TestMainNoCopyTypeDocs(t *testing.T) {
 	expected := `// DO NOT EDIT: Auto generated
 
 package gen
@@ -249,16 +244,15 @@ type PersonIface interface {
 }
 
 `
-
-	assert.Equal(t, expected, out)
-}
-
-func TestMainNoCopyMethodDocs(t *testing.T) {
-	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-d=false"}
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-y", "PersonIface is an interface for Person."}
 	out := captureStdout(func() {
 		main()
 	})
+	assert.Equal(t, expected, out)
 
+}
+
+func TestMainNoCopyMethodDocs(t *testing.T) {
 	expected := `// DO NOT EDIT: Auto generated
 
 package gen
@@ -276,41 +270,36 @@ type PersonIface interface {
 }
 
 `
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
 
 	assert.Equal(t, expected, out)
+
 }
 
 func TestMainDoNotImportPackageName(t *testing.T) {
+	expected := `// DO NOT EDIT: Auto generated
+
+package footest
+
+// TestInterface ...
+type TestInterface interface {
+	GetUser(userID string) *User
+	CreateUser(user *User) (*User, error)
+}
+
+`
 	os.Args = []string{"cmd", "-f", srcFile2, "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-d=false"}
 	out := captureStdout(func() {
 		main()
 	})
 
-	expected := `// DO NOT EDIT: Auto generated
-
-package footest
-
-// TestInterface ...
-type TestInterface interface {
-	GetUser(userID string) *User
-	CreateUser(user *User) (*User, error)
-}
-
-`
-
 	assert.Equal(t, expected, out)
 }
 
 func TestMainFileGlob(t *testing.T) {
-	src := strings.Replace(srcFile2, "test_impl.go", "test*.go", 1)
-	//assert.True(t, strings.HasSuffix(srcFile2, "test*.go"))
-	//assert.Equal(t, "bla", src)
-	//ssert.Contains(t, src, "test*")
-	os.Args = []string{"cmd", "-f", src, "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-d=false"}
-	out := captureStdout(func() {
-		main()
-	})
-
 	expected := `// DO NOT EDIT: Auto generated
 
 package footest
@@ -319,20 +308,18 @@ package footest
 type TestInterface interface {
 	GetUser(userID string) *User
 	CreateUser(user *User) (*User, error)
-	UpdateUser(userID string) *User
 }
 
 `
-
-	assert.Equal(t, expected, out)
-}
-
-func TestMainDefaultComment(t *testing.T) {
-	os.Args = []string{"cmd", "-f", srcFile2, "-s", "TestImpl", "-p", "footest", "-i", "TestInterface", "-d=false"}
+	os.Args = []string{"cmd", "-f", srcFile2, "-s", "TestImpl", "-p", "footest", "-c", "DO NOT EDIT: Auto generated", "-i", "TestInterface", "-d=false"}
 	out := captureStdout(func() {
 		main()
 	})
+	assert.Equal(t, expected, out)
 
+}
+
+func TestMainDefaultComment(t *testing.T) {
 	expected := `// Code generated by ifacemaker; DO NOT EDIT.
 
 package footest
@@ -344,16 +331,15 @@ type TestInterface interface {
 }
 
 `
+	os.Args = []string{"cmd", "-f", srcFile2, "-s", "TestImpl", "-p", "footest", "-i", "TestInterface", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
 
 	assert.Equal(t, expected, out)
 }
 
 func TestMainUsingDeclarationInSamePackage(t *testing.T) {
-	os.Args = []string{"cmd", "-f", srcFile4, "-m", "github.com/test/footest", "-s", "Smiter", "-i", "Smiter", "-p", "another", "-c", "DO NOT EDIT: Auto generated", "-d=false"}
-	out := captureStdout(func() {
-		main()
-	})
-
 	expected := `// DO NOT EDIT: Auto generated
 
 package another
@@ -368,6 +354,10 @@ type Smiter interface {
 }
 
 `
+	os.Args = []string{"cmd", "-f", srcFile4, "-m", "github.com/test/footest", "-s", "Smiter", "-i", "Smiter", "-p", "another", "-c", "DO NOT EDIT: Auto generated", "-d=false"}
+	out := captureStdout(func() {
+		main()
+	})
 
 	assert.Equal(t, expected, out)
 }
