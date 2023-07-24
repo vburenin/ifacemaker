@@ -252,7 +252,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		if i.Name != nil {
 			imports = append(imports, fmt.Sprintf("%s %s", i.Name.String(), i.Path.Value))
 		} else {
-			imports = append(imports, fmt.Sprintf("%s", i.Path.Value))
+			imports = append(imports, i.Path.Value)
 		}
 	}
 
