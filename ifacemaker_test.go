@@ -11,8 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var src = `
-package main
+var src = `package main
 
 // Person contains data related to a person.
 type Person struct {
@@ -67,7 +66,6 @@ func (p *Person) SetNameAndTelephone(name, telephone string) {
 func SomeFunction() string {
 	return "Something"
 }
-
 
 `
 
@@ -374,6 +372,9 @@ func captureStdout(f func()) string {
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		fmt.Printf("error:[%v] copying file", err)
+		return ""
+	}
 	return buf.String()
 }

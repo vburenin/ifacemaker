@@ -6,8 +6,8 @@ import (
 	"go/doc"
 	"go/parser"
 	"go/token"
-	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,7 +63,6 @@ func GetTypeDeclarationName(decl ast.Decl) string {
 			return ""
 		}
 		typeName = typeSpec.Name.Name
-		break // assuming first value is the good one.
 	}
 
 	return typeName
@@ -250,7 +249,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		if i.Name != nil {
 			imports = append(imports, fmt.Sprintf("%s %s", i.Name.String(), i.Path.Value))
 		} else {
-			imports = append(imports, fmt.Sprintf("%s", i.Path.Value))
+			imports = append(imports, i.Path.Value)
 		}
 	}
 
@@ -337,11 +336,11 @@ func Make(options MakeOptions) ([]byte, error) {
 
 	// First pass on all files to find declared types
 	for _, f := range options.Files {
-		src, err := ioutil.ReadFile(f)
+		b, err := os.ReadFile(f)
 		if err != nil {
-			return nil, err
+			return []byte{}, err
 		}
-		types := ParseDeclaredTypes(src)
+		types := ParseDeclaredTypes(b)
 		// validate structs from file against input struct Type
 		if !validateStructType(types, options.StructType) {
 			return []byte{},
@@ -363,7 +362,7 @@ func Make(options MakeOptions) ([]byte, error) {
 
 	// Second pass to build up the interface
 	for _, f := range options.Files {
-		src, err := ioutil.ReadFile(f)
+		src, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
