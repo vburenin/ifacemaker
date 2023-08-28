@@ -14,6 +14,7 @@ import (
 
 type cmdlineArgs struct {
 	Files           []string `short:"f" long:"file" description:"Go source file to read, either filename or glob" required:"true"`
+	ExcludeFiles    []string `short:"ef" long:"exclude-files" description:"Go source file to exclude in 'Files' option, either filename or glob" required:"false"`
 	StructType      string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
 	IfaceName       string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName         string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
@@ -60,7 +61,21 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		files = append(files, matches...)
+		for _, f := range matches {
+			fileMatchExcludePattern := false
+			for _, fileExcludePattern := range args.ExcludeFiles {
+				match, err := filepath.Match(fileExcludePattern, f)
+				if err != nil {
+					log.Fatal(err)
+				}
+				if match {
+					fileMatchExcludePattern = true
+				}
+			}
+			if !fileMatchExcludePattern {
+				files = append(files, f)
+			}
+		}
 	}
 	result, err := maker.Make(maker.MakeOptions{
 		Files:           files,
