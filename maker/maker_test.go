@@ -1,6 +1,7 @@
 package maker
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"strings"
@@ -11,96 +12,94 @@ import (
 
 var (
 	src = []byte(`
-	package main
+package main
 
-	import (
-		notmain "fmt"
-	)
-	
-	// Person ...
-	type Person struct {
-		name string
-		age int
-		telephone string
-		noPointer notmain.Formatter
-		pointer *notmain.Formatter
-	}
-	
-	// Name ...
-	func (p *Person) Name() string {
-		return p.name
-	}
-	
-	// SetName ...
-	func (p *Person) SetName(name string) {
-		p.name = name
-	}
-	
-	// Age ...
-	func (p *Person) Age() int {
-		return p.Age
-	}
-	
-	// Age ...
-	func (p *Person) SetAge(age int) {
-		p.Age = age
-	}
-	
-	// AgeAndName ...
-	func (p *Person) AgeAndName() (int, string) {
-		return p.age, p.name
-	}
-	
-	func (p *Person) SetAgeAndName(name string, age int) {
-		p.name = name
-		p.age = age
-	}
-	
-	// TelephoneAndName ...
-	func (p *Person) GetNameAndTelephone() (name, telephone string) {
-		telephone = p.telephone
-		name = p.name
-		return
-	}
-	
-	func (p *Person) SetNameAndTelephone(name, telephone string) {
-		p.name = name
-		p.telephone = telephone
-	}
-	
-	func (p *Person) ReturnPointer() *notmain.Formatter {
-		return nil
-	}
-	
-	func (p *Person) ReturnNoPointer() notmain.Formatter {
-		return nil
-	}
-	
-	func (p *Person) ArgumentNoPointer(formatter notmain.Formatter)  {
-	
-	}
-	
-	func (p *Person) ArgumentPointer(formatter *notmain.Formatter)  {
-	
-	}
-	
-	func (p *Person) SecondArgumentPointer(abc int, formatter *notmain.Formatter)  {
-	
-	}
+import (
+	notmain "fmt"
+)
 
-	func (p *Person) unexportedFuncOne() bool {
-		return true
-	}
+// Person ...
+type Person struct {
+	name      string
+	age       int
+	telephone string
+	noPointer notmain.Formatter
+	pointer   *notmain.Formatter
+}
 
-	func (p *Person) unexportedFuncTwo() string {
-		return "hi!"
-	}
+// Name ...
+func (p *Person) Name() string {
+	return p.name
+}
 
-	func SomeFunction() string {
-		return "Something"
-	}
+// SetName ...
+func (p *Person) SetName(name string) {
+	p.name = name
+}
 
-	type SomeType struct {}`)
+// Age ...
+func (p *Person) Age() int {
+	return p.age
+}
+
+// Age ...
+func (p *Person) SetAge(age int) {
+	p.Age = age
+}
+
+// AgeAndName ...
+func (p *Person) GetAgeAndName() {
+	return p.age, p.name
+}
+
+func (p *Person) SetAgeAndName(name string, age int) {
+	p.name = name
+	p.age = age
+}
+
+func (p *Person) GetNameAndTelephone() (name, telephone string) {
+	telephone = p.telephone
+	name = p.name
+	return
+}
+
+func (p *Person) SetNameAndTelephone(name, telephone string) {
+	p.name = name
+	p.telephone = telephone
+}
+
+func (p *Person) ReturnPointer() *notmain.Formatter {
+	return nil
+}
+
+func (p *Person) ReturnNoPointer() notmain.Formatter {
+	return nil
+}
+
+func (p *Person) ArgumentNoPointer(formatter notmain.Formatter) {
+
+}
+
+func (p *Person) ArgumentPointer(formatter *notmain.Formatter) {
+
+}
+
+func (p *Person) SecondArgumentPointer(abc int, formatter *notmain.Formatter) {
+
+}
+
+func (p *Person) unexportedFuncOne() bool {
+	return true
+}
+
+func (p *Person) unexportedFuncTwo() string {
+	return "hi!"
+}
+func SomeFunction() string {
+	return "Something"
+}
+
+type SomeType struct{}`)
 )
 
 func TestLines(t *testing.T) {
@@ -116,6 +115,7 @@ func TestLines(t *testing.T) {
 
 func TestParseDeclaredTypes(t *testing.T) {
 	declaredTypes := ParseDeclaredTypes(src)
+
 	assert.Equal(t, declaredType{
 		Name:    "Person",
 		Package: "main",
@@ -227,6 +227,10 @@ func TestFormatFieldList(t *testing.T) {
 				expectedResults = []string{"*notmain.Formatter"}
 			case "ReturnNoPointer":
 				expectedResults = []string{"notmain.Formatter"}
+			case "unexportedFuncOne":
+				expectedResults = []string{"bool"}
+			case "unexportedFuncTwo":
+				expectedResults = []string{"string"}
 			case "ArgumentNoPointer":
 				expectedParams = []string{"formatter notmain.Formatter"}
 			case "ArgumentPointer":
@@ -234,8 +238,8 @@ func TestFormatFieldList(t *testing.T) {
 			case "SecondArgumentPointer":
 				expectedParams = []string{"abc int", "formatter *notmain.Formatter"}
 			}
-			assert.Equalf(t, expectedParams, params, "%s must have the expected params", methodName)
-			assert.Equalf(t, expectedResults, results, "%s must have the expected results", methodName)
+			assert.Equal(t, expectedParams, params)
+			assert.Equal(t, expectedResults, results)
 		}
 	}
 }
@@ -307,4 +311,41 @@ type MyInterface interface {
 `
 
 	assert.Equal(t, expected, string(b))
+}
+
+func Test_validate_struct_types(t *testing.T) {
+	types := []declaredType{}
+	tt := []struct {
+		name   string
+		inpSet func()
+		stType string
+		exp    bool
+	}{
+		{
+			name: "valid struct type present in file",
+			inpSet: func() {
+				types = append(types, declaredType{Name: t.Name(), Package: t.Name()})
+			},
+			stType: t.Name(),
+			exp:    true,
+		},
+		{
+			name:   "struct not present",
+			inpSet: func() {},
+			stType: fmt.Sprintf("%s-1", t.Name()),
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			// populate data in test input
+			tc.inpSet()
+			// test
+			got := validateStructType(types, tc.stType)
+			// validate
+			assert.Equal(t, tc.exp, got)
+		})
+
+	}
+
 }

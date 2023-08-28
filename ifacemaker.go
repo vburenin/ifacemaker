@@ -2,13 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/jessevdk/go-flags"
-
 	"github.com/vburenin/ifacemaker/maker"
 )
 
@@ -82,7 +80,11 @@ func main() {
 	if args.Output == "" {
 		fmt.Println(string(result))
 	} else {
-		if err := ioutil.WriteFile(args.Output, result, 0644); err != nil {
+		f, err := os.Create(args.Output)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := f.Write(result); err != nil {
 			log.Fatal(err)
 		}
 	}
