@@ -296,6 +296,30 @@ type MyInterface interface {
 	assert.Equal(t, expected, string(b))
 }
 
+func TestMakeInterfaceWithGoGenerate(t *testing.T) {
+	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
+	imports := []string{`"github.com/example/example"`}
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "go:generate MyInterface does cool stuff", methods, imports)
+	assert.Nil(t, err, "MakeInterface returned an error")
+
+	expected := `// DO NOT EDIT: Auto generated
+
+package pkg
+
+import (
+	"github.com/example/example"
+)
+
+//go:generate MyInterface does cool stuff
+type MyInterface interface {
+	// MyMethod does cool stuff
+	MyMethod(string) example.Example
+}
+`
+
+	assert.Equal(t, expected, string(b))
+}
+
 func TestMakeInterfaceMultiLineIfaceComment(t *testing.T) {
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", nil, nil)
 	assert.Nil(t, err, "MakeInterface returned an error:", err)
