@@ -117,6 +117,15 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 	return fd.Recv.List[0].Type, nil
 }
 
+// reMatchTypename matches any of the following to extract the <type>:
+//
+//	*<type>
+//	[]<type>
+//	[]*<type>
+//	map[<keyType>]<type>
+//	map[<keyType>]*<type>
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[\w+\]|map\[\w+\]\*)(\w+)$`)
+
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
 // return values as a FieldList.
@@ -136,11 +145,26 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
 
+		// Try to match <modifier><type>. If matched variable `match` will look like this for t=="[]Category":
+		// match[0][0] = "[]Category"
+		// match[0][1] = "[]"
+		// match[0][2] = "Category"
+		match := reMatchTypename.FindAllStringSubmatch(t, -1)
+		if match != nil {
+			// Set `t` so it will compare correctly with `dt.Name` below
+			t = match[0][2]
+		}
+
 		for _, dt := range declaredTypes {
 			if t == dt.Name && pkgName != dt.Package {
 				// The type of this field is the same as one declared in the source package,
 				// and the source package is not the same as the destination package.
-				t = dt.Fullname()
+				if match != nil {
+					// Add back `[]` or `*` if there was such a match
+					t = match[0][1] + dt.Fullname()
+				} else {
+					t = dt.Fullname()
+				}
 			}
 		}
 
