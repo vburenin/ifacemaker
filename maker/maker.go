@@ -144,7 +144,7 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-
+		t2 := t
 		// Try to match <modifier><type>. If matched variable `match` will look like this for t=="[]Category":
 		// match[0][0] = "[]Category"
 		// match[0][1] = "[]"
@@ -152,11 +152,11 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 		match := reMatchTypename.FindAllStringSubmatch(t, -1)
 		if match != nil {
 			// Set `t` so it will compare correctly with `dt.Name` below
-			t = match[0][2]
+			t2 = match[0][2]
 		}
 
 		for _, dt := range declaredTypes {
-			if t == dt.Name && pkgName != dt.Package {
+			if t2 == dt.Name && pkgName != dt.Package {
 				// The type of this field is the same as one declared in the source package,
 				// and the source package is not the same as the destination package.
 				if match != nil {
