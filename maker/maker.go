@@ -160,7 +160,8 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 				// The type of this field is the same as one declared in the source package,
 				// and the source package is not the same as the destination package.
 				if match != nil {
-					// Add back `[]` or `*` if there was such a match
+					// Add back `*`, `[]`, `[]*`, `map[<type>]` or `map[<type>]*` if there was a
+					// match.
 					t = match[0][1] + dt.Fullname()
 				} else {
 					t = dt.Fullname()
