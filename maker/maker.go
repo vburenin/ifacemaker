@@ -308,9 +308,9 @@ type MakeOptions struct {
 	WithNotExported bool
 }
 
-// validateStructType checks input struct type against the parsed declared
+// containsStructType checks input struct type against the parsed declared
 // types and returns true when present
-func validateStructType(types []declaredType, stType string) bool {
+func containsStructType(types []declaredType, stType string) bool {
 	for _, v := range types {
 		if strings.EqualFold(v.Name, stType) {
 			return true
@@ -335,24 +335,28 @@ func Make(options MakeOptions) ([]byte, error) {
 	var typeDoc string
 
 	// First pass on all files to find declared types
+	seenInputStruct := false
 	for _, f := range options.Files {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			return []byte{}, err
 		}
 		types := ParseDeclaredTypes(b)
-		// validate structs from file against input struct Type
-		if !validateStructType(types, options.StructType) {
-			return []byte{},
-				fmt.Errorf("%q structtype not found in input files",
-					options.StructType)
-		}
+		// Track if we've seen the input Struct type
+		seenInputStruct = seenInputStruct || containsStructType(types, options.StructType)
 		for _, t := range types {
 			if _, ok := tset[t.Fullname()]; !ok {
 				allDeclaredTypes = append(allDeclaredTypes, t)
 				tset[t.Fullname()] = struct{}{}
 			}
 		}
+	}
+
+	// Validate at least one file contains the input struct Type
+	if !seenInputStruct {
+		return []byte{},
+			fmt.Errorf("%q structtype not found in input files",
+				options.StructType)
 	}
 
 	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
