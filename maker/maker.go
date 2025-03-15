@@ -335,7 +335,6 @@ func Make(options MakeOptions) ([]byte, error) {
 	var typeDoc string
 
 	// First pass on all files to find declared types
-	seenInputStruct := false
 	for _, f := range options.Files {
 		b, err := os.ReadFile(f)
 		if err != nil {
@@ -343,7 +342,6 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 		types := ParseDeclaredTypes(b)
 		// Track if we've seen the input Struct type
-		seenInputStruct = seenInputStruct || containsStructType(types, options.StructType)
 		for _, t := range types {
 			if _, ok := tset[t.Fullname()]; !ok {
 				allDeclaredTypes = append(allDeclaredTypes, t)
@@ -353,7 +351,7 @@ func Make(options MakeOptions) ([]byte, error) {
 	}
 
 	// Validate at least one file contains the input struct Type
-	if !seenInputStruct {
+	if !containsStructType(allDeclaredTypes, options.StructType) {
 		return []byte{},
 			fmt.Errorf("%q structtype not found in input files",
 				options.StructType)
