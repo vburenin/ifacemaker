@@ -308,9 +308,9 @@ type MakeOptions struct {
 	WithNotExported bool
 }
 
-// containsStructType checks input struct type against the parsed declared
+// validateStructType checks input struct type against the parsed declared
 // types and returns true when present
-func containsStructType(types []declaredType, stType string) bool {
+func validateStructType(types []declaredType, stType string) bool {
 	for _, v := range types {
 		if strings.EqualFold(v.Name, stType) {
 			return true
@@ -351,7 +351,7 @@ func Make(options MakeOptions) ([]byte, error) {
 	}
 
 	// Validate at least one file contains the input struct Type
-	if !containsStructType(allDeclaredTypes, options.StructType) {
+	if !validateStructType(allDeclaredTypes, options.StructType) {
 		return []byte{},
 			fmt.Errorf("%q structtype not found in input files",
 				options.StructType)

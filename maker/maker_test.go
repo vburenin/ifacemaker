@@ -341,7 +341,7 @@ func Test_validate_struct_types(t *testing.T) {
 			// populate data in test input
 			tc.inpSet()
 			// test
-			got := containsStructType(types, tc.stType)
+			got := validateStructType(types, tc.stType)
 			// validate
 			assert.Equal(t, tc.exp, got)
 		})
