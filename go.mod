@@ -1,17 +1,18 @@
 module github.com/vburenin/ifacemaker
 
-go 1.18
+go 1.23.0
 
 require (
-	github.com/jessevdk/go-flags v1.4.1-0.20181029123624-5de817a9aa20
-	github.com/stretchr/testify v1.2.2
-	golang.org/x/tools v0.1.10
+	github.com/jessevdk/go-flags v1.6.1
+	github.com/stretchr/testify v1.10.0
+	golang.org/x/tools v0.31.0
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

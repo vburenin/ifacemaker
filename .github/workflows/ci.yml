@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+
+jobs:
+  unit:
+    strategy:
+      matrix:
+        go-version: [1.23.x, 1.24.x]
+        platform: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Fetch Repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Test
+        run: go run gotest.tools/gotestsum@latest -f testname -- ./... -race -count=1 -coverprofile=coverage.txt -covermode=atomic -shuffle=on
+
+  repeated:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Test
+        run: go run gotest.tools/gotestsum@latest -f testname -- ./... -race -count=15 -shuffle=on
