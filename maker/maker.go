@@ -193,7 +193,11 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 		"",
 	)
 	if len(ifaceComment) > 0 {
-		output = append(output, fmt.Sprintf("// %s", strings.Replace(ifaceComment, "\n", "\n// ", -1)))
+		prefix := "// "
+		if strings.HasPrefix(ifaceComment, "go:generate") {
+			prefix = "//"
+		}
+		output = append(output, fmt.Sprintf("%s%s", prefix, strings.Replace(ifaceComment, "\n", "\n// ", -1)))
 	}
 	output = append(output, fmt.Sprintf("type %s interface {", ifaceName))
 	output = append(output, methods...)
