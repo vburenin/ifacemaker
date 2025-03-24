@@ -345,18 +345,20 @@ func Make(options MakeOptions) ([]byte, error) {
 			return []byte{}, err
 		}
 		types := ParseDeclaredTypes(b)
-		// validate structs from file against input struct Type
-		if !validateStructType(types, options.StructType) {
-			return []byte{},
-				fmt.Errorf("%q structtype not found in input files",
-					options.StructType)
-		}
+		// Track if we've seen the input Struct type
 		for _, t := range types {
 			if _, ok := tset[t.Fullname()]; !ok {
 				allDeclaredTypes = append(allDeclaredTypes, t)
 				tset[t.Fullname()] = struct{}{}
 			}
 		}
+	}
+
+	// Validate at least one file contains the input struct Type
+	if !validateStructType(allDeclaredTypes, options.StructType) {
+		return []byte{},
+			fmt.Errorf("%q structtype not found in input files",
+				options.StructType)
 	}
 
 	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
