@@ -141,7 +141,7 @@ var srcFile4 = filepath.Join(os.TempDir(), "footest", "smiter.go")
 var srcFile5 = filepath.Join(os.TempDir(), "bartest", "healer.go")
 
 func TestMain(m *testing.M) {
-    // Add /tmp/footest directory
+	// Add /tmp/footest directory
 	dirPath := filepath.Join(os.TempDir(), "footest")
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		err := os.Mkdir(dirPath, os.ModePerm)
@@ -149,7 +149,7 @@ func TestMain(m *testing.M) {
 			panic(fmt.Sprintf("Failed to create directory: %s", err))
 		}
 	}
-    // Add /tmp/bartest directory
+	// Add /tmp/bartest directory
 	dirPath = filepath.Join(os.TempDir(), "bartest")
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		err := os.Mkdir(dirPath, os.ModePerm)
