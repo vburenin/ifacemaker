@@ -2,12 +2,15 @@ package maker
 
 import (
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -372,4 +375,224 @@ func Test_validate_struct_types(t *testing.T) {
 
 	}
 
+}
+
+func TestDeclaredTypeFullname(t *testing.T) {
+	dt := declaredType{Name: "Test", Package: "pkg"}
+	assert.Equal(t, "pkg.Test", dt.Fullname())
+}
+
+func TestGetTypeDeclarationName_Valid(t *testing.T) {
+	src := []byte("package main\ntype MyType int")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var found string
+	for _, d := range file.Decls {
+		name := GetTypeDeclarationName(d)
+		if name != "" {
+			found = name
+			break
+		}
+	}
+	assert.Equal(t, "MyType", found)
+}
+
+func TestGetTypeDeclarationName_NonTypeDecl(t *testing.T) {
+	src := []byte("package main\nfunc main() {}")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	for _, d := range file.Decls {
+		name := GetTypeDeclarationName(d)
+		// For non-type declarations, the function should return an empty string.
+		assert.Equal(t, "", name)
+	}
+}
+
+func TestGetReceiverType_NotMethod(t *testing.T) {
+	// Create a FuncDecl with no receiver (i.e. a plain function)
+	fd := &ast.FuncDecl{
+		Recv: nil,
+		Name: ast.NewIdent("Func"),
+	}
+	_, err := GetReceiverType(fd)
+	assert.Error(t, err)
+}
+
+func TestFormatCodeValid(t *testing.T) {
+	code := "package main\nfunc main(){println(\"hello\")}"
+	formatted, err := FormatCode(code)
+	assert.NoError(t, err)
+	// Check that the formatted code contains the package declaration.
+	assert.Contains(t, string(formatted), "package main")
+}
+
+func TestFormatCodeInvalid(t *testing.T) {
+	// Providing a code fragment that is not valid Go code.
+	code := "not a valid go code"
+	_, err := FormatCode(code)
+	assert.Error(t, err)
+}
+
+func TestFormatFieldList_Nil(t *testing.T) {
+	parts := FormatFieldList([]byte(""), nil, "main", nil)
+	assert.Nil(t, parts)
+}
+
+func TestMakeStructNotFound(t *testing.T) {
+	// Create a temporary file with source that does not declare the expected struct.
+	tmpFile, err := os.CreateTemp("", "test*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	content := []byte("package main\nfunc Foo() {}")
+	_, err = tmpFile.Write(content)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	_, err = Make(MakeOptions{
+		Files:      []string{tmpFile.Name()},
+		StructType: "NonExistent",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "TestIface",
+	})
+	assert.Error(t, err)
+	// Update expected substring to include the quotes
+	assert.Contains(t, err.Error(), `"NonExistent" structtype not found`)
+}
+
+func TestMakeFileNotFound(t *testing.T) {
+	// Provide a filename that does not exist.
+	_, err := Make(MakeOptions{
+		Files:      []string{"non_existing_file.go"},
+		StructType: "Foo",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "TestIface",
+	})
+	assert.Error(t, err)
+}
+
+// TestParseDeclaredTypesEmpty ensures that a source with no type declarations returns an empty slice.
+func TestParseDeclaredTypesEmpty(t *testing.T) {
+	src := []byte("package main\nfunc Foo() {}")
+	types := ParseDeclaredTypes(src)
+	assert.Empty(t, types)
+}
+
+// TestFormatFieldList_MultipleNames verifies that parameters with multiple names are formatted correctly.
+func TestFormatFieldList_MultipleNames(t *testing.T) {
+	src := []byte(`package main
+func Foo(a, b int) int { return 0 }`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+	params := FormatFieldList(src, fd.Type.Params, "main", nil)
+	// Expect parameters to be formatted as "a, b int"
+	assert.Contains(t, params, "a, b int")
+}
+
+// TestGetReceiverTypeName_NonPointer checks that a non-pointer receiver is handled without stripping extra characters.
+func TestGetReceiverTypeName_NonPointer(t *testing.T) {
+	src := []byte(`package main
+type MyStruct struct {}
+func (m MyStruct) Foo() {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	found := false
+	for _, d := range file.Decls {
+		typeName, fd := GetReceiverTypeName(src, d)
+		if typeName == "MyStruct" {
+			found = true
+			// Should not have a leading '*' since receiver is not a pointer.
+			assert.Equal(t, "MyStruct", typeName)
+			assert.Equal(t, "Foo", fd.Name.Name)
+		}
+	}
+	assert.True(t, found, "Expected to find a receiver with type 'MyStruct'")
+}
+
+// TestMakeExcludeMethod ensures that methods listed in the exclusion set are omitted.
+func TestMakeExcludeMethod(t *testing.T) {
+	// Create a temporary file with a struct that has two methods: Foo and Bar.
+	tmpFile, err := os.CreateTemp("", "test_exclude_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	src := []byte(`package main
+type MyStruct struct {}
+func (m *MyStruct) Foo() {}
+func (m *MyStruct) Bar() {}
+`)
+	_, err = tmpFile.Write(src)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:          []string{tmpFile.Name()},
+		StructType:     "MyStruct",
+		Comment:        "Test Comment",
+		PkgName:        "main",
+		IfaceName:      "MyIface",
+		ExcludeMethods: []string{"Bar"},
+		CopyDocs:       true,
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+	assert.Contains(t, outStr, "Foo()")
+	assert.NotContains(t, outStr, "Bar()")
+}
+
+// TestMakeDuplicateMethods verifies that if the same method is present in multiple files, it appears only once.
+func TestMakeDuplicateMethods(t *testing.T) {
+	src1 := []byte(`package main
+type MyStruct struct {}
+func (m *MyStruct) Foo() {}
+`)
+	src2 := []byte(`package main
+type MyStruct struct {}
+func (m *MyStruct) Foo() {}
+`)
+	tmpFile1, err := os.CreateTemp("", "dup1_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile1.Name())
+	_, err = tmpFile1.Write(src1)
+	require.NoError(t, err)
+	tmpFile1.Close()
+
+	tmpFile2, err := os.CreateTemp("", "dup2_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile2.Name())
+	_, err = tmpFile2.Write(src2)
+	require.NoError(t, err)
+	tmpFile2.Close()
+
+	result, err := Make(MakeOptions{
+		Files:      []string{tmpFile1.Name(), tmpFile2.Name()},
+		StructType: "MyStruct",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "MyIface",
+		CopyDocs:   false,
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+	// The method Foo() should appear only once.
+	count := strings.Count(outStr, "Foo()")
+	assert.Equal(t, 1, count)
 }
