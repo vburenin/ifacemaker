@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,19 +111,19 @@ func TestLines(t *testing.T) {
 	method := Method{Code: code, Docs: docs}
 	lines := method.Lines()
 
-	assert.Equal(t, "// TestMethod is great", lines[0])
-	assert.Equal(t, "func TestMethod() string {return \"I am great\"}", lines[1])
+	require.Equal(t, "// TestMethod is great", lines[0])
+	require.Equal(t, "func TestMethod() string {return \"I am great\"}", lines[1])
 }
 
 func TestParseDeclaredTypes(t *testing.T) {
 	declaredTypes := ParseDeclaredTypes(src)
 
-	assert.Equal(t, declaredType{
+	require.Equal(t, declaredType{
 		Name:    "Person",
 		Package: "main",
 	},
 		declaredTypes[0])
-	assert.Equal(t, declaredType{
+	require.Equal(t, declaredType{
 		Name:    "SomeType",
 		Package: "main",
 	},
@@ -134,26 +133,26 @@ func TestParseDeclaredTypes(t *testing.T) {
 func TestParseStruct(t *testing.T) {
 	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "", false)
 
-	assert.Equal(t, "Name() (string)", methods[0].Code)
+	require.Equal(t, "Name() (string)", methods[0].Code)
 
 	imp := imports[0]
 	trimmedImp := strings.TrimSpace(imp)
 
-	assert.Equal(t, `notmain "fmt"`, trimmedImp)
-	assert.Equal(t, "Person ...", typeDoc)
+	require.Equal(t, `notmain "fmt"`, trimmedImp)
+	require.Equal(t, "Person ...", typeDoc)
 }
 
 func TestParseStructWithImportModule(t *testing.T) {
 	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false)
 
-	assert.Equal(t, "Name() (string)", methods[0].Code)
+	require.Equal(t, "Name() (string)", methods[0].Code)
 
 	imp, module := imports[0], imports[1]
 	trimmedImp := strings.TrimSpace(imp)
 
-	assert.Equal(t, `notmain "fmt"`, trimmedImp)
-	assert.Equal(t, `. "github.com/test/test"`, module)
-	assert.Equal(t, "Person ...", typeDoc)
+	require.Equal(t, `notmain "fmt"`, trimmedImp)
+	require.Equal(t, `. "github.com/test/test"`, module)
+	require.Equal(t, "Person ...", typeDoc)
 }
 
 func TestParseStructWithNotExported(t *testing.T) {
@@ -170,14 +169,14 @@ func TestParseStructWithNotExported(t *testing.T) {
 		}
 	}
 
-	assert.True(t, oneExists)
-	assert.True(t, twoExists)
+	require.True(t, oneExists)
+	require.True(t, twoExists)
 }
 
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-	assert.Nil(t, err, "ParseFile returned an error")
+	require.Nil(t, err, "ParseFile returned an error")
 
 	hasPersonFuncDecl := false
 	for _, d := range a.Decls {
@@ -187,19 +186,19 @@ func TestGetReceiverTypeName(t *testing.T) {
 		}
 		switch typeName {
 		case "Person":
-			assert.NotNil(t, fd, "receiver type with name %s had a nil func decl")
+			require.NotNil(t, fd, "receiver type with name %s had a nil func decl")
 			// OK
 			hasPersonFuncDecl = true
 		}
 	}
 
-	assert.True(t, hasPersonFuncDecl, "Never registered a func decl with the `Person` receiver type")
+	require.True(t, hasPersonFuncDecl, "Never registered a func decl with the `Person` receiver type")
 }
 
 func TestFormatFieldList(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-	assert.Nil(t, err, "ParseFile returned an error")
+	require.Nil(t, err, "ParseFile returned an error")
 
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
@@ -241,22 +240,22 @@ func TestFormatFieldList(t *testing.T) {
 			case "SecondArgumentPointer":
 				expectedParams = []string{"abc int", "formatter *notmain.Formatter"}
 			}
-			assert.Equal(t, expectedParams, params)
-			assert.Equal(t, expectedResults, results)
+			require.Equal(t, expectedParams, params)
+			require.Equal(t, expectedResults, results)
 		}
 	}
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
 	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "", false)
-	assert.Equal(t, "", typeDoc)
+	require.Equal(t, "", typeDoc)
 }
 
 func TestMakeInterface(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff", methods, imports)
-	assert.Nil(t, err, "MakeInterface returned an error")
+	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -273,14 +272,14 @@ type MyInterface interface {
 }
 `
 
-	assert.Equal(t, expected, string(b))
+	require.Equal(t, expected, string(b))
 }
 
 func TestMakeWithoutInterfaceComment(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "", methods, imports)
-	assert.Nil(t, err, "MakeInterface returned an error")
+	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -296,14 +295,14 @@ type MyInterface interface {
 }
 `
 
-	assert.Equal(t, expected, string(b))
+	require.Equal(t, expected, string(b))
 }
 
 func TestMakeInterfaceWithGoGenerate(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "go:generate MyInterface does cool stuff", methods, imports)
-	assert.Nil(t, err, "MakeInterface returned an error")
+	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -320,12 +319,12 @@ type MyInterface interface {
 }
 `
 
-	assert.Equal(t, expected, string(b))
+	require.Equal(t, expected, string(b))
 }
 
 func TestMakeInterfaceMultiLineIfaceComment(t *testing.T) {
 	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", nil, nil)
-	assert.Nil(t, err, "MakeInterface returned an error:", err)
+	require.Nil(t, err, "MakeInterface returned an error:", err)
 
 	expected := `// DO NOT EDIT: Auto generated
 
@@ -337,7 +336,7 @@ type MyInterface interface {
 }
 `
 
-	assert.Equal(t, expected, string(b))
+	require.Equal(t, expected, string(b))
 }
 
 func Test_validate_struct_types(t *testing.T) {
@@ -370,7 +369,7 @@ func Test_validate_struct_types(t *testing.T) {
 			// test
 			got := validateStructType(types, tc.stType)
 			// validate
-			assert.Equal(t, tc.exp, got)
+			require.Equal(t, tc.exp, got)
 		})
 
 	}
@@ -379,7 +378,7 @@ func Test_validate_struct_types(t *testing.T) {
 
 func TestDeclaredTypeFullname(t *testing.T) {
 	dt := declaredType{Name: "Test", Package: "pkg"}
-	assert.Equal(t, "pkg.Test", dt.Fullname())
+	require.Equal(t, "pkg.Test", dt.Fullname())
 }
 
 func TestGetTypeDeclarationName_Valid(t *testing.T) {
@@ -396,7 +395,7 @@ func TestGetTypeDeclarationName_Valid(t *testing.T) {
 			break
 		}
 	}
-	assert.Equal(t, "MyType", found)
+	require.Equal(t, "MyType", found)
 }
 
 func TestGetTypeDeclarationName_NonTypeDecl(t *testing.T) {
@@ -408,7 +407,7 @@ func TestGetTypeDeclarationName_NonTypeDecl(t *testing.T) {
 	for _, d := range file.Decls {
 		name := GetTypeDeclarationName(d)
 		// For non-type declarations, the function should return an empty string.
-		assert.Equal(t, "", name)
+		require.Equal(t, "", name)
 	}
 }
 
@@ -419,27 +418,27 @@ func TestGetReceiverType_NotMethod(t *testing.T) {
 		Name: ast.NewIdent("Func"),
 	}
 	_, err := GetReceiverType(fd)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestFormatCodeValid(t *testing.T) {
 	code := "package main\nfunc main(){println(\"hello\")}"
 	formatted, err := FormatCode(code)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// Check that the formatted code contains the package declaration.
-	assert.Contains(t, string(formatted), "package main")
+	require.Contains(t, string(formatted), "package main")
 }
 
 func TestFormatCodeInvalid(t *testing.T) {
 	// Providing a code fragment that is not valid Go code.
 	code := "not a valid go code"
 	_, err := FormatCode(code)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestFormatFieldList_Nil(t *testing.T) {
 	parts := FormatFieldList([]byte(""), nil, "main", nil)
-	assert.Nil(t, parts)
+	require.Nil(t, parts)
 }
 
 func TestMakeStructNotFound(t *testing.T) {
@@ -460,9 +459,9 @@ func TestMakeStructNotFound(t *testing.T) {
 		PkgName:    "main",
 		IfaceName:  "TestIface",
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 	// Update expected substring to include the quotes
-	assert.Contains(t, err.Error(), `"NonExistent" structtype not found`)
+	require.Contains(t, err.Error(), `"NonExistent" structtype not found`)
 }
 
 func TestMakeFileNotFound(t *testing.T) {
@@ -474,14 +473,14 @@ func TestMakeFileNotFound(t *testing.T) {
 		PkgName:    "main",
 		IfaceName:  "TestIface",
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 // TestParseDeclaredTypesEmpty ensures that a source with no type declarations returns an empty slice.
 func TestParseDeclaredTypesEmpty(t *testing.T) {
 	src := []byte("package main\nfunc Foo() {}")
 	types := ParseDeclaredTypes(src)
-	assert.Empty(t, types)
+	require.Empty(t, types)
 }
 
 // TestFormatFieldList_MultipleNames verifies that parameters with multiple names are formatted correctly.
@@ -502,7 +501,7 @@ func Foo(a, b int) int { return 0 }`)
 	require.NotNil(t, fd)
 	params := FormatFieldList(src, fd.Type.Params, "main", nil)
 	// Expect parameters to be formatted as "a, b int"
-	assert.Contains(t, params, "a, b int")
+	require.Contains(t, params, "a, b int")
 }
 
 // TestGetReceiverTypeName_NonPointer checks that a non-pointer receiver is handled without stripping extra characters.
@@ -520,11 +519,11 @@ func (m MyStruct) Foo() {}`)
 		if typeName == "MyStruct" {
 			found = true
 			// Should not have a leading '*' since receiver is not a pointer.
-			assert.Equal(t, "MyStruct", typeName)
-			assert.Equal(t, "Foo", fd.Name.Name)
+			require.Equal(t, "MyStruct", typeName)
+			require.Equal(t, "Foo", fd.Name.Name)
 		}
 	}
-	assert.True(t, found, "Expected to find a receiver with type 'MyStruct'")
+	require.True(t, found, "Expected to find a receiver with type 'MyStruct'")
 }
 
 // TestMakeExcludeMethod ensures that methods listed in the exclusion set are omitted.
@@ -554,8 +553,8 @@ func (m *MyStruct) Bar() {}
 	})
 	require.NoError(t, err)
 	outStr := string(result)
-	assert.Contains(t, outStr, "Foo()")
-	assert.NotContains(t, outStr, "Bar()")
+	require.Contains(t, outStr, "Foo()")
+	require.NotContains(t, outStr, "Bar()")
 }
 
 // TestMakeDuplicateMethods verifies that if the same method is present in multiple files, it appears only once.
@@ -594,5 +593,5 @@ func (m *MyStruct) Foo() {}
 	outStr := string(result)
 	// The method Foo() should appear only once.
 	count := strings.Count(outStr, "Foo()")
-	assert.Equal(t, 1, count)
+	require.Equal(t, 1, count)
 }

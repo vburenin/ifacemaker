@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var src = `package main
@@ -209,7 +209,7 @@ type PersonIface interface {
 
 `
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 func TestMainNoIfaceComment(t *testing.T) {
@@ -242,7 +242,7 @@ type PersonIface interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 
 }
 
@@ -274,7 +274,7 @@ type PersonIface interface {
 	out := captureStdout(func() {
 		main()
 	})
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 
 }
 
@@ -301,7 +301,7 @@ type PersonIface interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 
 }
 
@@ -322,7 +322,7 @@ type TestInterface interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 func TestMainFileGlob(t *testing.T) {
@@ -341,7 +341,7 @@ type TestInterface interface {
 	out := captureStdout(func() {
 		main()
 	})
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 
 }
 
@@ -362,7 +362,7 @@ type TestInterface interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 func TestMainUsingUnknownDeclarationInSamePackage(t *testing.T) {
@@ -385,7 +385,7 @@ type Smiter interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 func TestMainUsingImportedDeclaration(t *testing.T) {
@@ -409,7 +409,7 @@ type Healer interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 func TestMainWithMultipleFiles(t *testing.T) {
@@ -434,7 +434,7 @@ type Test interface {
 		main()
 	})
 
-	assert.Equal(t, expected, out)
+	require.Equal(t, expected, out)
 }
 
 // not thread safe
