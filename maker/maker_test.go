@@ -701,3 +701,100 @@ func Foo() []MyType { return nil }`)
 	require.Len(t, results, 1)
 	require.Equal(t, "[]other.MyType", results[0])
 }
+
+// TestFormatFieldList_NoModifier covers the branch in FormatFieldList()
+// where there is no regex match and t is set via dt.Fullname().
+func TestFormatFieldList_NoModifier(t *testing.T) {
+	// Source with a parameter type "MyType" (no modifier like "*" or "[]")
+	src := []byte(`package main
+func Foo(x MyType) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	// declaredTypes includes MyType with a package different than "main"
+	declaredTypes := []declaredType{
+		{Name: "MyType", Package: "other"},
+	}
+	// When pkgName ("main") is different from dt.Package ("other"),
+	// the type should be replaced with dt.Fullname() ("other.MyType").
+	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	require.Len(t, params, 1)
+	require.Equal(t, "x other.MyType", params[0])
+}
+
+// TestMake_StructTypeNotFound_EmptyFile covers the branch in Make()
+// where the declared struct type is not found in the input files.
+func TestMake_StructTypeNotFound_EmptyFile(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_empty_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// File with no type declarations.
+	content := []byte("package main\n")
+	_, err = tmpFile.Write(content)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	_, err = Make(MakeOptions{
+		Files:      []string{tmpFile.Name()},
+		StructType: "NonExistent",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "TestIface",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `"NonExistent" structtype not found in input files`)
+}
+
+// TestMake_DuplicateImports verifies that when multiple files import the same package,
+// the for-loop over imports in Make() deduplicates them.
+func TestMake_DuplicateImports(t *testing.T) {
+	// Create first temporary file with an import and a method that uses fmt.Stringer.
+	src1 := []byte(`package main
+import "fmt"
+type MyStruct struct {}
+func (m *MyStruct) Foo() fmt.Stringer { return nil }`)
+	tmpFile1, err := os.CreateTemp("", "dupimports1_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile1.Name())
+	_, err = tmpFile1.Write(src1)
+	require.NoError(t, err)
+	tmpFile1.Close()
+
+	// Create second temporary file with the same import and a method that uses fmt.Stringer.
+	src2 := []byte(`package main
+import "fmt"
+type MyStruct struct {}
+func (m *MyStruct) Bar() fmt.Stringer { return nil }`)
+	tmpFile2, err := os.CreateTemp("", "dupimports2_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile2.Name())
+	_, err = tmpFile2.Write(src2)
+	require.NoError(t, err)
+	tmpFile2.Close()
+
+	result, err := Make(MakeOptions{
+		Files:      []string{tmpFile1.Name(), tmpFile2.Name()},
+		StructType: "MyStruct",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "TestIface",
+		CopyDocs:   false,
+	})
+	require.NoError(t, err)
+
+	outStr := string(result)
+	// Check that the "fmt" import appears only once.
+	count := strings.Count(outStr, `"fmt"`)
+	require.Equal(t, 1, count)
+}
