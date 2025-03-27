@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -797,4 +798,41 @@ func (m *MyStruct) Bar() fmt.Stringer { return nil }`)
 	// Check that the "fmt" import appears only once.
 	count := strings.Count(outStr, `"fmt"`)
 	require.Equal(t, 1, count)
+}
+
+// TestParseDeclaredTypes_Fatal runs ParseDeclaredTypes with invalid Go code.
+// Because ParseDeclaredTypes calls log.Fatal on parse errors, we run this in a subprocess.
+func TestParseDeclaredTypes_Fatal(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		// Provide invalid Go source to force a parse error
+		ParseDeclaredTypes([]byte("invalid go code"))
+		// This point should not be reached because log.Fatal should exit.
+		return
+	}
+	// Re-run this test in a subprocess so that the os.Exit call can be observed.
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseDeclaredTypes_Fatal")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	// An exit error is expected due to log.Fatal.
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return // Test passed.
+	}
+	t.Fatalf("ParseDeclaredTypes did not exit as expected")
+}
+
+// TestParseStruct_Fatal runs ParseStruct with invalid Go source.
+// Since ParseStruct calls log.Fatal on parse errors, we capture that via a subprocess.
+func TestParseStruct_Fatal(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		// Provide invalid source code to trigger parser.ParseFile error inside ParseStruct.
+		ParseStruct([]byte("invalid go code"), "Foo", true, true, "", nil, "", false)
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseStruct_Fatal")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return // Test passed.
+	}
+	t.Fatalf("ParseStruct did not exit as expected")
 }
