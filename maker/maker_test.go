@@ -595,3 +595,109 @@ func (m *MyStruct) Foo() {}
 	count := strings.Count(outStr, "Foo()")
 	require.Equal(t, 1, count)
 }
+
+// TestMake_NoMethods creates a temporary Go file that defines a struct with no methods.
+// This ensures that Make() handles the case when there are no methods to include.
+func TestMake_NoMethods(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_nomethods_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// The source contains a struct "MyStruct" with no methods.
+	content := []byte(`package main
+type MyStruct struct {}`)
+	_, err = tmpFile.Write(content)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:      []string{tmpFile.Name()},
+		StructType: "MyStruct",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "MyIface",
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+	// Verify the interface declaration exists but contains no methods.
+	require.Contains(t, outStr, "type MyIface interface {")
+	// Extract the block inside the interface declaration.
+	lines := strings.Split(outStr, "\n")
+	inIface := false
+	methodCount := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "type") && strings.Contains(trimmed, "interface") {
+			inIface = true
+			continue
+		}
+		if inIface {
+			if trimmed == "}" {
+				break
+			}
+			if trimmed != "" {
+				methodCount++
+			}
+		}
+	}
+	require.Equal(t, 0, methodCount)
+}
+
+// TestFormatFieldList_Replaced_WithNames verifies that FormatFieldList
+// replaces a field type that matches a declared type (with names present)
+func TestFormatFieldList_Replaced_WithNames(t *testing.T) {
+	// The source has a parameter "x []MyType"
+	src := []byte(`package main
+func Foo(x []MyType) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	// Find the function declaration for Foo
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	// declaredTypes contains MyType but with a different package so that replacement occurs.
+	declaredTypes := []declaredType{
+		{Name: "MyType", Package: "other"},
+	}
+	// Call FormatFieldList with pkgName "main"
+	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	// Expect the type "[]MyType" to be replaced with "[]other.MyType"
+	require.Len(t, params, 1)
+	require.Equal(t, "x []other.MyType", params[0])
+}
+
+// TestFormatFieldList_UnnamedReturn verifies FormatFieldList on a return field list with no names.
+func TestFormatFieldList_UnnamedReturn(t *testing.T) {
+	// The function returns an unnamed []MyType.
+	src := []byte(`package main
+func Foo() []MyType { return nil }`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	// Find the function declaration for Foo
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	declaredTypes := []declaredType{
+		{Name: "MyType", Package: "other"},
+	}
+	results := FormatFieldList(src, fd.Type.Results, "main", declaredTypes)
+	// When there are no names, the type string itself is added.
+	require.Len(t, results, 1)
+	require.Equal(t, "[]other.MyType", results[0])
+}
