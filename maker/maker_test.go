@@ -563,7 +563,7 @@ func TestMakeDuplicateMethods(t *testing.T) {
 type MyStruct struct {}
 func (m *MyStruct) Foo() {}
 `)
-	src2 := []byte(`package main
+	src2 := []byte(`package other
 type MyStruct struct {}
 func (m *MyStruct) Foo() {}
 `)
