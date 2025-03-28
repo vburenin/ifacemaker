@@ -7,14 +7,15 @@ makes unit testing easier.
 
 ## Install
 
-```
+```console
 go install github.com/vburenin/ifacemaker@latest
 ```
 
 ## Usage
+
 Here is the help output of ifacemaker:
 
-```
+```console
 $ ifacemaker --help
 Usage:
   ifacemaker [OPTIONS]
@@ -41,43 +42,43 @@ $
 As an example, let's say you wanted to generate an interface for the Human structure
 in this sample code:
 
-```
+```go
 package main
 
 import "fmt"
 
 type Human struct {
-	name string
-	age  int
+ name string
+ age  int
 }
 
 // Returns the name of our Human.
 func (h *Human) GetName() string {
-	return h.name
+ return h.name
 }
 
 // Our Human just had a birthday! Increase its age.
 func (h *Human) Birthday() {
-	h.age += 1
-	fmt.Printf("I am now %d years old!\n", h.age)
+ h.age += 1
+ fmt.Printf("I am now %d years old!\n", h.age)
 }
 
 // Make the Human say hello.
 func (h *Human) SayHello() {
-	fmt.Printf("Hello, my name is %s, and I am %d years old.\n", h.name, h.age)
+ fmt.Printf("Hello, my name is %s, and I am %d years old.\n", h.name, h.age)
 }
 
 func main() {
-	human := &Human{name: "Bob", age: 30}
-	human.GetName()
-	human.SayHello()
-	human.Birthday()
+ human := &Human{name: "Bob", age: 30}
+ human.GetName()
+ human.SayHello()
+ human.Birthday()
 }
 ```
 
 The ifacemaker helper program can generate this interface for you:
 
-```
+```console
 $ ifacemaker -f human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated"
 // DONT EDIT: Auto generated
 
@@ -85,12 +86,12 @@ package humantest
 
 // HumanIface makes human interaction easy
 type HumanIface interface {
-	// Returns the name of our Human.
-	GetName() string
-	// Our Human just had a birthday! Increase its age.
-	Birthday()
-	// Make the Human say hello.
-	SayHello()
+ // Returns the name of our Human.
+ GetName() string
+ // Our Human just had a birthday! Increase its age.
+ Birthday()
+ // Make the Human say hello.
+ SayHello()
 }
 
 $
@@ -103,14 +104,14 @@ ifacemaker program preserves docstrings by default.
 You can tell ifacemaker to write its output to a file, versus stdout, using the `-o`
 parameter:
 
-```
+```console
 $ ifacemaker -f human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated" -o humaniface.go
 $
 ```
 
 You can also run it with `Docker`:
 
-```
+```console
 $ docker run --rm -v $(pwd):/tmp/ vburenin/ifacemaker -f /tmp/human.go -s Human -i HumanIface -p humantest -y "HumanIface makes human interaction easy" -c "DONT EDIT: Auto generated" -o /tmp/humaniface.go
 $
 ```
