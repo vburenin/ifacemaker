@@ -379,12 +379,6 @@ func Make(options MakeOptions) ([]byte, error) {
 			}
 		}
 	}
-	// validate structs from file against input struct Type
-	if !validateStructType(allDeclaredTypes, options.StructType) {
-		return []byte{},
-			fmt.Errorf("%q structtype not found in input files",
-				options.StructType)
-	}
 
 	// Validate at least one file contains the input struct Type
 	if !validateStructType(allDeclaredTypes, options.StructType) {
