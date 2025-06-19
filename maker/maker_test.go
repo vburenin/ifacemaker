@@ -102,7 +102,12 @@ func SomeFunction() string {
 	return "Something"
 }
 
-type SomeType struct{}`)
+type SomeType struct{}
+
+// Turing is a person
+type Turing struct {
+	*Person
+}`)
 )
 
 func TestLines(t *testing.T) {
@@ -131,8 +136,13 @@ func TestParseDeclaredTypes(t *testing.T) {
 		declaredTypes[1])
 }
 
+func TestParseEmbeddingGraph(t *testing.T) {
+	callGraph := ParseEmbeddingGraph(src)
+	require.Equal(t, "Person", callGraph["Turing"][0])
+}
+
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "", false)
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "", false, nil, false)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -144,7 +154,7 @@ func TestParseStruct(t *testing.T) {
 }
 
 func TestParseStructWithImportModule(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false)
+	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false, nil, false)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -157,7 +167,7 @@ func TestParseStructWithImportModule(t *testing.T) {
 }
 
 func TestParseStructWithNotExported(t *testing.T) {
-	methods, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true)
+	methods, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true, nil, false)
 
 	var oneExists, twoExists bool
 	for _, method := range methods {
@@ -172,6 +182,24 @@ func TestParseStructWithNotExported(t *testing.T) {
 
 	require.True(t, oneExists)
 	require.True(t, twoExists)
+}
+
+func TestParseStructWithPromoted(t *testing.T) {
+	callGraph := map[string]struct{}{
+		"Person": {},
+	}
+	methods, imports, typeDoc := ParseStruct(src, "Turing", true, true, "", nil, "", false, callGraph, true)
+	t.Log(methods)
+	t.Log(imports)
+	t.Log(typeDoc)
+
+	require.Equal(t, "Name() (string)", methods[0].Code)
+
+	imp := imports[0]
+	trimmedImp := strings.TrimSpace(imp)
+
+	require.Equal(t, `notmain "fmt"`, trimmedImp)
+	require.Equal(t, "Turing is a person", typeDoc)
 }
 
 func TestGetReceiverTypeName(t *testing.T) {
@@ -248,7 +276,7 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "", false)
+	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "", false, nil, false)
 	require.Equal(t, "", typeDoc)
 }
 
@@ -800,6 +828,72 @@ func (m *MyStruct) Bar() fmt.Stringer { return nil }`)
 	require.Equal(t, 1, count)
 }
 
+func TestMake_WithPromoted(t *testing.T) {
+	// Create a temporary file with a struct that embeds another struct.
+	tmpFile, err := os.CreateTemp("", "test_withpromoted_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	src := []byte(`package main
+type EmbeddedStruct struct {}
+func (e *EmbeddedStruct) EmbeddedMethod() {}
+
+type MyStruct struct {
+	EmbeddedStruct
+}
+`)
+	_, err = tmpFile.Write(src)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:        []string{tmpFile.Name()},
+		StructType:   "MyStruct",
+		Comment:      "Test Comment",
+		PkgName:      "main",
+		IfaceName:    "MyIface",
+		WithPromoted: true,
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+
+	// Check that the promoted method from EmbeddedStruct is included.
+	require.Contains(t, outStr, "EmbeddedMethod()")
+}
+
+func TestMake_WithPromotedPointer(t *testing.T) {
+	// Create a temporary file with a struct that embeds a pointer to another struct.
+	tmpFile, err := os.CreateTemp("", "test_withpromoted_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	src := []byte(`package main
+type EmbeddedStruct struct {}
+func (e *EmbeddedStruct) EmbeddedMethod() {}
+
+type MyStruct struct {
+	*EmbeddedStruct
+}
+`)
+	_, err = tmpFile.Write(src)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:        []string{tmpFile.Name()},
+		StructType:   "MyStruct",
+		Comment:      "Test Comment",
+		PkgName:      "main",
+		IfaceName:    "MyIface",
+		WithPromoted: true,
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+
+	// Check that the promoted method from EmbeddedStruct is included.
+	require.Contains(t, outStr, "EmbeddedMethod()")
+}
+
 // TestParseDeclaredTypes_Fatal runs ParseDeclaredTypes with invalid Go code.
 // Because ParseDeclaredTypes calls log.Fatal on parse errors, we run this in a subprocess.
 func TestParseDeclaredTypes_Fatal(t *testing.T) {
@@ -825,7 +919,7 @@ func TestParseDeclaredTypes_Fatal(t *testing.T) {
 func TestParseStruct_Fatal(t *testing.T) {
 	if os.Getenv("BE_CRASHER") == "1" {
 		// Provide invalid source code to trigger parser.ParseFile error inside ParseStruct.
-		ParseStruct([]byte("invalid go code"), "Foo", true, true, "", nil, "", false)
+		ParseStruct([]byte("invalid go code"), "Foo", true, true, "", nil, "", false, nil, false)
 		return
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestParseStruct_Fatal")

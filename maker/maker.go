@@ -255,6 +255,64 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 	return
 }
 
+// ParseEmbeddingGraph inspects the given source code to find
+// the embedding relationship between structs
+func ParseEmbeddingGraph(src []byte) map[string][]string {
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "", src, parser.ParseComments)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// Track the embedding graph
+	embeddingGraph := make(map[string][]string)
+	for _, decl := range file.Decls {
+		// Skip non-type declaration
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			// Skip non-type specifications
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			// Skip non-struct types
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+
+			// Process struct types
+			childStructName := typeSpec.Name.Name
+			if _, ok := embeddingGraph[childStructName]; !ok {
+				embeddingGraph[childStructName] = []string{}
+			}
+			for _, fieldType := range structType.Fields.List {
+				// Skip non-embedded fields
+				if len(fieldType.Names) > 0 {
+					continue
+				}
+
+				// Track the relationship between embedded and pointer structs.
+				// Maps struct to embedded structs
+				if identifier, ok := fieldType.Type.(*ast.Ident); ok {
+					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], identifier.Name)
+				} else if starExpr, ok := fieldType.Type.(*ast.StarExpr); ok {
+					if ident, ok := starExpr.X.(*ast.Ident); ok {
+						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], ident.Name)
+					}
+				}
+			}
+		}
+	}
+
+	return embeddingGraph
+}
+
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
 // interface on and a bool saying whether it should
@@ -267,7 +325,7 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
@@ -286,6 +344,10 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		imports = append(imports, fmt.Sprintf(". %s", strconv.Quote(importModule)))
 	}
 
+	// Track methods that are already processed
+	methodSet := make(map[string]struct{})
+
+	// Process direct methods first
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
 			if !withNotExported && !fd.Name.IsExported() {
@@ -306,6 +368,36 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				Code: method,
 				Docs: docs,
 			})
+			methodSet[mName] = struct{}{}
+		}
+	}
+
+	// Add promoted methods next
+	if withPromoted {
+		for _, d := range a.Decls {
+			a, fd := GetReceiverTypeName(src, d)
+			_, isEmbedded := embeddedStructNamesSet[a]
+			_, isOverriden := methodSet[a]
+			if isEmbedded && !isOverriden {
+				if !withNotExported && !fd.Name.IsExported() {
+					continue
+				}
+				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
+				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+				mName := fd.Name.String()
+				method := fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
+				var docs []string
+				if fd.Doc != nil && copyDocs {
+					for _, d := range fd.Doc.List {
+						docs = append(docs, string(src[d.Pos()-1:d.End()-1]))
+					}
+				}
+				methods = append(methods, Method{
+					Name: mName,
+					Code: method,
+					Docs: docs,
+				})
+			}
 		}
 	}
 
@@ -328,6 +420,7 @@ type MakeOptions struct {
 	StructType      string
 	Comment         string
 	PkgName         string
+	WithPromoted    bool
 	IfaceName       string
 	IfaceComment    string
 	ImportModule    string
@@ -356,9 +449,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		allImports       []string
 		allDeclaredTypes []declaredType
 
-		mset = make(map[string]struct{})
-		iset = make(map[string]struct{})
-		tset = make(map[string]struct{})
+		fullEmbeddingGraph = make(map[string][]string)
+		mset               = make(map[string]struct{})
+		iset               = make(map[string]struct{})
+		tset               = make(map[string]struct{})
 	)
 
 	var typeDoc string
@@ -370,6 +464,7 @@ func Make(options MakeOptions) ([]byte, error) {
 			return []byte{}, err
 		}
 		types := ParseDeclaredTypes(b)
+		graph := ParseEmbeddingGraph(b)
 
 		// Track if we've seen the input Struct type
 		for _, t := range types {
@@ -377,6 +472,14 @@ func Make(options MakeOptions) ([]byte, error) {
 				allDeclaredTypes = append(allDeclaredTypes, t)
 				tset[t.Fullname()] = struct{}{}
 			}
+		}
+
+		// Track the full call graph
+		for key, values := range graph {
+			if _, ok := fullEmbeddingGraph[key]; !ok {
+				fullEmbeddingGraph[key] = []string{}
+			}
+			fullEmbeddingGraph[key] = append(fullEmbeddingGraph[key], values...)
 		}
 	}
 
@@ -392,13 +495,28 @@ func Make(options MakeOptions) ([]byte, error) {
 		excludedMethods[mName] = struct{}{}
 	}
 
+	embeddedStructNamesSet := make(map[string]struct{})
+	queue := []string{options.StructType}
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		for _, embeddedStruct := range fullEmbeddingGraph[curr] {
+			if _, ok := embeddedStructNamesSet[embeddedStruct]; ok {
+				continue
+			}
+			embeddedStructNamesSet[embeddedStruct] = struct{}{}
+			queue = append(queue, embeddedStruct)
+		}
+	}
+
 	// Second pass to build up the interface
 	for _, f := range options.Files {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported)
+		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
 		for _, m := range methods {
 			if _, ok := excludedMethods[m.Name]; ok {
 				continue
