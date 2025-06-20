@@ -377,8 +377,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		for _, d := range a.Decls {
 			a, fd := GetReceiverTypeName(src, d)
 			_, isEmbedded := embeddedStructNamesSet[a]
-			_, isOverriden := methodSet[a]
-			if isEmbedded && !isOverriden {
+			_, isOverridden := methodSet[a]
+			if isEmbedded && !isOverridden {
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
