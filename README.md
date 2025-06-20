@@ -25,6 +25,7 @@ Application Options:
   -s, --struct=         Generate an interface for this structure name
   -i, --iface=          Name of the generated interface
   -p, --pkg=            Package name for the generated interface
+  -P, --promoted        Include promoted methods from embedded structs
   -y, --iface-comment=  Comment for the interface, default is '// <iface> ...'
   -m, --import-module=  Fully qualified module import for packages with a different target package '// <iface> ...'
   -e, --exclude-method= Name of method that will be excluded from output interface
