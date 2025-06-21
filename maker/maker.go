@@ -350,7 +350,13 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				continue
 			}
 			if ts.TypeParams != nil {
-				typeParams = string(src[ts.TypeParams.Pos()-1 : ts.TypeParams.End()-1])
+				var params []string
+				for _, field := range ts.TypeParams.List {
+					for _, name := range field.Names {
+						params = append(params, name.Name)
+					}
+				}
+				typeParams = fmt.Sprintf("[%s]", strings.Join(params, ", "))
 			}
 		}
 	}
