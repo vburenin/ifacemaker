@@ -15,6 +15,7 @@ type cmdlineArgs struct {
 	StructType      string   `short:"s" long:"struct" description:"Generate an interface for this structure name" required:"true"`
 	IfaceName       string   `short:"i" long:"iface" description:"Name of the generated interface" required:"true"`
 	PkgName         string   `short:"p" long:"pkg" description:"Package name for the generated interface" required:"true"`
+	WithPromoted    bool     `short:"P" long:"promoted" description:"Include promoted methods from embedded structs"`
 	IfaceComment    string   `short:"y" long:"iface-comment" description:"Comment for the interface, default is '// <iface> ...'"`
 	ImportModule    string   `short:"m" long:"import-module" description:"Fully qualified module import for packages with a different target package '// <iface> ...'"`
 	ExcludeMethods  []string `short:"e" long:"exclude-method" description:"Name of method that will be excluded from output interface"`
@@ -65,6 +66,7 @@ func main() {
 		StructType:      args.StructType,
 		Comment:         args.Comment,
 		PkgName:         args.PkgName,
+		WithPromoted:    args.WithPromoted,
 		IfaceName:       args.IfaceName,
 		IfaceComment:    args.IfaceComment,
 		CopyDocs:        args.copyDocs,
