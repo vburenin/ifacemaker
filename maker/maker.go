@@ -416,7 +416,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				}
 				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
-				mName := fd.Name.String()
+				mName = fd.Name.String()
 				method := ""
 				if len(ret) == 0 {
 					method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
