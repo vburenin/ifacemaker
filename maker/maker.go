@@ -97,6 +97,10 @@ func GetReceiverTypeName(src []byte, fl ast.Decl) (string, *ast.FuncDecl) {
 	if len(st) > 0 && st[0] == '*' {
 		st = st[1:]
 	}
+	// Strip generic type parameters if present, e.g. Foo[T] -> Foo
+	if m := regexp.MustCompile(`^(\w+)(?:\[.*\])?$`).FindStringSubmatch(st); m != nil {
+		st = m[1]
+	}
 	return st, fd
 }
 
@@ -124,7 +128,9 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 //	[]*<type>
 //	map[<keyType>]<type>
 //	map[<keyType>]*<type>
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[\w+\]|map\[\w+\]\*)(\w+)$`)
+//
+// Updated regex to support generic type parameters like Foo[T any].
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[.*\])?$`)
 
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
@@ -205,7 +211,7 @@ func FormatCode(code string) ([]byte, error) {
 // to an array, joins this array to a string
 // with newline and passes it on to FormatCode
 // which then directly returns the result
-func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []string, imports []string) ([]byte, error) {
+func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string, methods []string, imports []string) ([]byte, error) {
 	output := []string{
 		"// " + comment,
 		"",
@@ -224,7 +230,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment string, methods []s
 		}
 		output = append(output, fmt.Sprintf("%s%s", prefix, strings.Replace(ifaceComment, "\n", "\n// ", -1)))
 	}
-	output = append(output, fmt.Sprintf("type %s interface {", ifaceName))
+	output = append(output, fmt.Sprintf("type %s%s interface {", ifaceName, typeParams))
 	output = append(output, methods...)
 	output = append(output, "}")
 	code := strings.Join(output, "\n")
@@ -325,11 +331,28 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string) {
+func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
+	}
+
+	// Extract type parameters for the struct if present.
+	for _, decl := range a.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != structName {
+				continue
+			}
+			if ts.TypeParams != nil {
+				typeParams = string(src[ts.TypeParams.Pos()-1 : ts.TypeParams.End()-1])
+			}
+		}
 	}
 
 	for _, i := range a.Imports {
@@ -356,7 +379,12 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
 			mName := fd.Name.String()
-			method := fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
+			method := ""
+			if len(ret) == 0 {
+				method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
+			} else {
+				method = fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
+			}
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
@@ -385,7 +413,12 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
 				mName := fd.Name.String()
-				method := fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
+				method := ""
+				if len(ret) == 0 {
+					method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
+				} else {
+					method = fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
+				}
 				var docs []string
 				if fd.Doc != nil && copyDocs {
 					for _, d := range fd.Doc.List {
@@ -455,7 +488,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		tset               = make(map[string]struct{})
 	)
 
-	var typeDoc string
+	var (
+		typeDoc    string
+		ifaceParms string
+	)
 
 	// First pass on all files to find declared types
 	for _, f := range options.Files {
@@ -516,7 +552,7 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
+		methods, imports, parsedTypeDoc, parsedParams := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
 		for _, m := range methods {
 			if _, ok := excludedMethods[m.Name]; ok {
 				continue
@@ -536,13 +572,16 @@ func Make(options MakeOptions) ([]byte, error) {
 		if typeDoc == "" {
 			typeDoc = parsedTypeDoc
 		}
+		if ifaceParms == "" {
+			ifaceParms = parsedParams
+		}
 	}
 
 	if typeDoc != "" {
 		options.IfaceComment = fmt.Sprintf("%s\n%s", options.IfaceComment, typeDoc)
 	}
 
-	result, err := MakeInterface(options.Comment, options.PkgName, options.IfaceName, options.IfaceComment, allMethods, allImports)
+	result, err := MakeInterface(options.Comment, options.PkgName, options.IfaceName, options.IfaceComment, ifaceParms, allMethods, allImports)
 	if err != nil {
 		return nil, err
 	}

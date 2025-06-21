@@ -5,6 +5,9 @@ the structure methods of an existing `.go` file. The primary use case is to gene
 interfaces for gomock, so that gomock can generate mocks from those interfaces. This
 makes unit testing easier.
 
+The tool understands Go generics and will correctly generate interfaces for generic
+types and methods.
+
 ## Install
 
 ```console

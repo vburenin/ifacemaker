@@ -142,7 +142,7 @@ func TestParseEmbeddingGraph(t *testing.T) {
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "", false, nil, false)
+	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true, "", nil, "", false, nil, false)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -154,7 +154,7 @@ func TestParseStruct(t *testing.T) {
 }
 
 func TestParseStructWithImportModule(t *testing.T) {
-	methods, imports, typeDoc := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false, nil, false)
+	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false, nil, false)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -167,7 +167,7 @@ func TestParseStructWithImportModule(t *testing.T) {
 }
 
 func TestParseStructWithNotExported(t *testing.T) {
-	methods, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true, nil, false)
+	methods, _, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true, nil, false)
 
 	var oneExists, twoExists bool
 	for _, method := range methods {
@@ -188,7 +188,7 @@ func TestParseStructWithPromoted(t *testing.T) {
 	callGraph := map[string]struct{}{
 		"Person": {},
 	}
-	methods, imports, typeDoc := ParseStruct(src, "Turing", true, true, "", nil, "", false, callGraph, true)
+	methods, imports, typeDoc, _ := ParseStruct(src, "Turing", true, true, "", nil, "", false, callGraph, true)
 	t.Log(methods)
 	t.Log(imports)
 	t.Log(typeDoc)
@@ -276,14 +276,14 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc := ParseStruct(src, "Person", true, false, "", nil, "", false, nil, false)
+	_, _, typeDoc, _ := ParseStruct(src, "Person", true, false, "", nil, "", false, nil, false)
 	require.Equal(t, "", typeDoc)
 }
 
 func TestMakeInterface(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
-	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff", methods, imports)
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff", "", methods, imports)
 	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
@@ -307,7 +307,7 @@ type MyInterface interface {
 func TestMakeWithoutInterfaceComment(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
-	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "", methods, imports)
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "", "", methods, imports)
 	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
@@ -330,7 +330,7 @@ type MyInterface interface {
 func TestMakeInterfaceWithGoGenerate(t *testing.T) {
 	methods := []string{"// MyMethod does cool stuff", "MyMethod(string) example.Example"}
 	imports := []string{`"github.com/example/example"`}
-	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "go:generate MyInterface does cool stuff", methods, imports)
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "go:generate MyInterface does cool stuff", "", methods, imports)
 	require.Nil(t, err, "MakeInterface returned an error")
 
 	expected := `// DO NOT EDIT: Auto generated
@@ -352,7 +352,7 @@ type MyInterface interface {
 }
 
 func TestMakeInterfaceMultiLineIfaceComment(t *testing.T) {
-	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", nil, nil)
+	b, err := MakeInterface("DO NOT EDIT: Auto generated", "pkg", "MyInterface", "MyInterface does cool stuff.\nWith multi-line comments.", "", nil, nil)
 	require.Nil(t, err, "MakeInterface returned an error:", err)
 
 	expected := `// DO NOT EDIT: Auto generated
@@ -929,4 +929,46 @@ func TestParseStruct_Fatal(t *testing.T) {
 		return // Test passed.
 	}
 	t.Fatalf("ParseStruct did not exit as expected")
+}
+
+func TestGenericsSupport(t *testing.T) {
+	src := []byte(`package generic
+
+type Box[T any] struct{}
+
+func (b *Box[T]) Add(v T) {}
+func (b *Box[T]) Get() T { var zero T; return zero }
+`)
+
+	methods, _, _, typeParams := ParseStruct(src, "Box", true, true, "generic", nil, "", false, nil, false)
+	require.Equal(t, "[T any]", typeParams)
+	require.Equal(t, "Add(v T)", methods[0].Code)
+	require.Equal(t, "Get() (T)", methods[1].Code)
+
+	tmpFile, err := os.CreateTemp("", "generic_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	_, err = tmpFile.Write(src)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:      []string{tmpFile.Name()},
+		StructType: "Box",
+		Comment:    "Test Comment",
+		PkgName:    "generic",
+		IfaceName:  "BoxIface",
+		CopyDocs:   false,
+	})
+	require.NoError(t, err)
+	expected := `// Test Comment
+
+package generic
+
+type BoxIface[T any] interface {
+	Add(v T)
+	Get() T
+}
+`
+	require.Equal(t, expected, string(result))
 }
