@@ -130,7 +130,7 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 //	map[<keyType>]*<type>
 //
 // Updated regex to support generic type parameters like Foo[T any].
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[.*\])?$`)
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[[^\]]*\])?$`)
 
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
