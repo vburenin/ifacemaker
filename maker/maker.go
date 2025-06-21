@@ -374,11 +374,16 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	// Process direct methods first
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == structName {
+			mName := fd.Name.String()
+			if _, ok := methodSet[mName]; ok {
+				continue
+			}
 			if !withNotExported && !fd.Name.IsExported() {
 				continue
 			}
 			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+
 			mName := fd.Name.String()
 			method := ""
 			if len(ret) == 0 {
@@ -386,6 +391,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			} else {
 				method = fmt.Sprintf("%s(%s) (%s)", mName, strings.Join(params, ", "), strings.Join(ret, ", "))
 			}
+
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
@@ -563,9 +569,10 @@ func Make(options MakeOptions) ([]byte, error) {
 				continue
 			}
 
-			if _, ok := mset[m.Code]; !ok {
+			// Use m.Name as the key to ensure uniqueness of methods in mset.
+			if _, ok := mset[m.Name]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
-				mset[m.Code] = struct{}{}
+				mset[m.Name] = struct{}{}
 			}
 		}
 		for _, i := range imports {
