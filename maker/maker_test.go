@@ -894,6 +894,39 @@ type MyStruct struct {
 	require.Contains(t, outStr, "EmbeddedMethod()")
 }
 
+func TestMake_WithPromotedOverride(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_withpromoted_override_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	src := []byte(`package main
+type Base struct{}
+func (b *Base) Foo() string { return "" }
+
+type Sub struct {
+        Base
+}
+func (s *Sub) Foo() int { return 0 }
+`)
+	_, err = tmpFile.Write(src)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	result, err := Make(MakeOptions{
+		Files:        []string{tmpFile.Name()},
+		StructType:   "Sub",
+		Comment:      "Test Comment",
+		PkgName:      "main",
+		IfaceName:    "MyIface",
+		WithPromoted: true,
+	})
+	require.NoError(t, err)
+	outStr := string(result)
+
+	require.Contains(t, outStr, "Foo() int")
+	require.NotContains(t, outStr, "Foo() string")
+}
+
 // TestParseDeclaredTypes_Fatal runs ParseDeclaredTypes with invalid Go code.
 // Because ParseDeclaredTypes calls log.Fatal on parse errors, we run this in a subprocess.
 func TestParseDeclaredTypes_Fatal(t *testing.T) {
