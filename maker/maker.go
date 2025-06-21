@@ -367,7 +367,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		imports = append(imports, fmt.Sprintf(". %s", strconv.Quote(importModule)))
 	}
 
-	// Track methods that are already processed
+	// Track methods that are already processed. Keyed by method name
+	// so that promoted methods overridden in the main struct are skipped.
 	methodSet := make(map[string]struct{})
 
 	// Process direct methods first
@@ -405,8 +406,11 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		for _, d := range a.Decls {
 			a, fd := GetReceiverTypeName(src, d)
 			_, isEmbedded := embeddedStructNamesSet[a]
-			_, isOverridden := methodSet[a]
-			if isEmbedded && !isOverridden {
+			if isEmbedded {
+				mName := fd.Name.String()
+				if _, ok := methodSet[mName]; ok {
+					continue
+				}
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
@@ -430,6 +434,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 					Code: method,
 					Docs: docs,
 				})
+				methodSet[mName] = struct{}{}
 			}
 		}
 	}
