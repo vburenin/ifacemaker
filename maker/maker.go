@@ -529,6 +529,7 @@ func Make(options MakeOptions) ([]byte, error) {
 				continue
 			}
 
+			// Use m.Name as the key to ensure uniqueness of methods in mset.
 			if _, ok := mset[m.Name]; !ok {
 				allMethods = append(allMethods, m.Lines()...)
 				mset[m.Name] = struct{}{}
