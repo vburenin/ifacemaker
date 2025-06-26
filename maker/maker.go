@@ -454,7 +454,7 @@ type MakeOptions struct {
 // types and returns true when present
 func validateStructType(types []declaredType, stType string) bool {
 	for _, v := range types {
-		if strings.EqualFold(v.Name, stType) {
+		if v.Name == stType {
 			return true
 		}
 

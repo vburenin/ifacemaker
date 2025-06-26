@@ -416,6 +416,14 @@ func Test_validate_struct_types(t *testing.T) {
 			inpSet: func() {},
 			stType: fmt.Sprintf("%s-1", t.Name()),
 		},
+		{
+			name: "case mismatch",
+			inpSet: func() {
+				types = append(types, declaredType{Name: "MyStruct", Package: "pkg"})
+			},
+			stType: "mystruct",
+			exp:    false,
+		},
 	}
 
 	for _, tc := range tt {
