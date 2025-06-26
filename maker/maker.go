@@ -62,10 +62,29 @@ func GetTypeDeclarationName(decl ast.Decl) string {
 		if !ok {
 			return ""
 		}
+		// return the first type name found
 		typeName = typeSpec.Name.Name
+		break
 	}
 
 	return typeName
+}
+
+// getTypeDeclarationNames extracts all type names from the given declaration.
+// If the declaration is not a type declaration, it returns nil.
+func getTypeDeclarationNames(decl ast.Decl) []string {
+	gd, ok := decl.(*ast.GenDecl)
+	if !ok || gd.Tok != token.TYPE {
+		return nil
+	}
+
+	var names []string
+	for _, spec := range gd.Specs {
+		if ts, ok := spec.(*ast.TypeSpec); ok {
+			names = append(names, ts.Name.Name)
+		}
+	}
+	return names
 }
 
 // GetReceiverTypeName takes in the entire
@@ -241,10 +260,8 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 
 	sourcePackageName := a.Name.Name
 
-	name := ""
 	for _, d := range a.Decls {
-		name = GetTypeDeclarationName(d)
-		if name != "" {
+		for _, name := range getTypeDeclarationNames(d) {
 			declaredTypes = append(declaredTypes, declaredType{
 				Name:    name,
 				Package: sourcePackageName,
@@ -299,11 +316,17 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 
 				// Track the relationship between embedded and pointer structs.
 				// Maps struct to embedded structs
-				if identifier, ok := fieldType.Type.(*ast.Ident); ok {
-					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], identifier.Name)
-				} else if starExpr, ok := fieldType.Type.(*ast.StarExpr); ok {
-					if ident, ok := starExpr.X.(*ast.Ident); ok {
-						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], ident.Name)
+				switch t := fieldType.Type.(type) {
+				case *ast.Ident:
+					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], t.Name)
+				case *ast.SelectorExpr:
+					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], t.Sel.Name)
+				case *ast.StarExpr:
+					switch x := t.X.(type) {
+					case *ast.Ident:
+						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], x.Name)
+					case *ast.SelectorExpr:
+						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], x.Sel.Name)
 					}
 				}
 			}
