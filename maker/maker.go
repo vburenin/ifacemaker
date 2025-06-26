@@ -48,26 +48,15 @@ func (m *Method) Lines() []string {
 // Otherwise, it returns an empty string.
 func GetTypeDeclarationName(decl ast.Decl) string {
 	gd, ok := decl.(*ast.GenDecl)
-	if !ok {
+	if !ok || gd.Tok != token.TYPE || len(gd.Specs) == 0 {
 		return ""
 	}
 
-	if gd.Tok != token.TYPE {
-		return ""
+	if ts, ok := gd.Specs[0].(*ast.TypeSpec); ok {
+		return ts.Name.Name
 	}
 
-	typeName := ""
-	for _, spec := range gd.Specs {
-		typeSpec, ok := spec.(*ast.TypeSpec)
-		if !ok {
-			return ""
-		}
-		// return the first type name found
-		typeName = typeSpec.Name.Name
-		break
-	}
-
-	return typeName
+	return ""
 }
 
 // getTypeDeclarationNames extracts all type names from the given declaration.
@@ -259,7 +248,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string,
 // ParseDeclaredTypes inspect given src code to find type declaractions.
 func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 	fset := token.NewFileSet()
-	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -282,7 +271,7 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 // the embedding relationship between structs
 func ParseEmbeddingGraph(src []byte) map[string][]string {
 	fileSet := token.NewFileSet()
-	file, err := parser.ParseFile(fileSet, "", src, parser.ParseComments)
+	file, err := parser.ParseFile(fileSet, "src.go", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -356,7 +345,7 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 // fatally stop the execution
 func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string) {
 	fset := token.NewFileSet()
-	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -469,11 +458,12 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	}
 
 	if copyTypeDocs {
-		pkg := &ast.Package{Files: map[string]*ast.File{"": a}}
-		doc := doc.New(pkg, "", doc.AllDecls)
-		for _, t := range doc.Types {
-			if t.Name == structName {
-				typeDoc = strings.TrimSuffix(t.Doc, "\n")
+		pkgDoc, err := doc.NewFromFiles(fset, []*ast.File{a}, "", doc.AllDecls)
+		if err == nil {
+			for _, t := range pkgDoc.Types {
+				if t.Name == structName {
+					typeDoc = strings.TrimSuffix(t.Doc, "\n")
+				}
 			}
 		}
 	}
