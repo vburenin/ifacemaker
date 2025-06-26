@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+var testBinary string
 
 var src = `package main
 
@@ -156,6 +160,7 @@ var srcFile5 = filepath.Join(os.TempDir(), "bartest", "healer.go")
 var srcFile6 = filepath.Join(os.TempDir(), "bazztest", "custom_structs.go")
 
 func TestMain(m *testing.M) {
+	testBinary = os.Args[0]
 	// Add /tmp/footest directory
 	dirPath := filepath.Join(os.TempDir(), "footest")
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
@@ -480,6 +485,93 @@ type Test interface {
 	})
 
 	require.Equal(t, expected, out)
+}
+
+func TestMainWriteToFile(t *testing.T) {
+	outPath := filepath.Join(os.TempDir(), "ifacemaker_out.go")
+	os.Remove(outPath)
+
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-y", "PersonIface is an interface for Person.", "-D"}
+	expected := captureStdout(func() { main() })
+
+	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-y", "PersonIface is an interface for Person.", "-D", "-o", outPath}
+	main()
+
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	require.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(data)))
+}
+
+func TestMainParseArgsError(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"cmd", "-f"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainParseArgsError")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("main did not exit as expected")
+}
+
+func TestMainGlobError(t *testing.T) {
+	if os.Getenv("BE_CRASHER") == "1" {
+		os.Args = []string{"cmd", "-f", "[", "-s", "Person", "-i", "Iface", "-p", "gen"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainGlobError")
+	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("main did not exit as expected")
+}
+
+func TestMainHelp(t *testing.T) {
+	if os.Getenv("BE_CRASHER_HELP") == "1" {
+		os.Args = []string{"cmd", "-h"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainHelp")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_HELP=1")
+	err := cmd.Run()
+	require.NoError(t, err)
+}
+
+func TestMainMakeError(t *testing.T) {
+	if os.Getenv("BE_CRASHER_MAKEERR") == "1" {
+		os.Args = []string{"cmd", "-f", "/no/such/file.go", "-s", "Foo", "-p", "gen", "-i", "Iface"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainMakeError")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_MAKEERR=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("main did not exit as expected")
+}
+
+func TestMainOutputCreateError(t *testing.T) {
+	if os.Getenv("BE_CRASHER_OUTERR") == "1" {
+		os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-i", "Iface", "-o", "/nonexistent/path/out.go"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainOutputCreateError")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_OUTERR=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("main did not exit as expected")
 }
 
 // not thread safe
