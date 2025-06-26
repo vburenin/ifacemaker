@@ -23,7 +23,7 @@ type cmdlineArgs struct {
 
 	// jessevdk/go-flags doesn't support default values for boolean flags,
 	// so we use a string for backwards-compatibility and then convert it to a bool later.
-	CopyDocs string `short:"d" long:"doc" description:"Copy docs from methods" option:"true" option:"false" default:"true"`
+	CopyDocs string `short:"d" long:"doc" description:"Copy docs from methods" choice:"true" choice:"false" default:"true"`
 	copyDocs bool
 
 	CopyTypeDoc bool   `short:"D" long:"type-doc" description:"Copy type doc from struct"`
@@ -86,6 +86,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer f.Close()
 		if _, err := f.Write(result); err != nil {
 			log.Fatal(err)
 		}
