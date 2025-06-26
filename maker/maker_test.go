@@ -136,9 +136,36 @@ func TestParseDeclaredTypes(t *testing.T) {
 		declaredTypes[1])
 }
 
+// Ensure that type declarations grouped in a single block are all discovered.
+func TestParseDeclaredTypes_MultiSpec(t *testing.T) {
+	multiSrc := []byte(`package main
+type (
+    First int
+    Second string
+)`)
+	types := ParseDeclaredTypes(multiSrc)
+	require.Equal(t, []declaredType{
+		{Name: "First", Package: "main"},
+		{Name: "Second", Package: "main"},
+	}, types)
+}
+
 func TestParseEmbeddingGraph(t *testing.T) {
 	callGraph := ParseEmbeddingGraph(src)
 	require.Equal(t, "Person", callGraph["Turing"][0])
+}
+
+// Verify embedded structs referenced from other packages are captured.
+func TestParseEmbeddingGraph_SelectorExpr(t *testing.T) {
+	extSrc := []byte(`package main
+import "otherpkg"
+type MyStruct struct {
+    otherpkg.External
+    *otherpkg.Pointer
+}`)
+	graph := ParseEmbeddingGraph(extSrc)
+	require.Contains(t, graph, "MyStruct")
+	require.ElementsMatch(t, []string{"External", "Pointer"}, graph["MyStruct"])
 }
 
 func TestParseStruct(t *testing.T) {
