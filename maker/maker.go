@@ -106,7 +106,7 @@ func GetReceiverTypeName(src []byte, fl ast.Decl) (string, *ast.FuncDecl) {
 		st = st[1:]
 	}
 	// Strip generic type parameters if present, e.g. Foo[T] -> Foo
-	if m := regexp.MustCompile(`^(\w+)(?:\[.*\])?$`).FindStringSubmatch(st); m != nil {
+	if m := regexp.MustCompile(`^(\w+)(?:\[.+\])?$`).FindStringSubmatch(st); m != nil {
 		st = m[1]
 	}
 	return st, fd
@@ -138,7 +138,7 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 //	map[<keyType>]*<type>
 //
 // Updated regex to support generic type parameters like Foo[T any].
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[[^\]]*\])?$`)
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[.+\])?$`)
 
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
@@ -434,7 +434,6 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				}
 				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
 				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
-				mName = fd.Name.String()
 				method := ""
 				if len(ret) == 0 {
 					method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
