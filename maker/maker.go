@@ -362,6 +362,9 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				continue
 			}
 			if ts.TypeParams != nil {
+				// Subtracting 1 from ts.TypeParams.Pos() and ts.TypeParams.End() adjusts the indices
+				// to match the zero-based indexing of the src slice. This ensures the correct
+				// extraction of type parameters from the source code.
 				typeParams = string(src[ts.TypeParams.Pos()-1 : ts.TypeParams.End()-1])
 			}
 		}
