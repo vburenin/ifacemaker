@@ -513,7 +513,7 @@ func Make(options MakeOptions) ([]byte, error) {
 
 	var (
 		typeDoc    string
-		ifaceParms string
+		ifaceParams string
 	)
 
 	// First pass on all files to find declared types
@@ -596,8 +596,8 @@ func Make(options MakeOptions) ([]byte, error) {
 		if typeDoc == "" {
 			typeDoc = parsedTypeDoc
 		}
-		if ifaceParms == "" {
-			ifaceParms = parsedParams
+		if ifaceParams == "" {
+			ifaceParams = parsedParams
 		}
 	}
 
@@ -605,7 +605,7 @@ func Make(options MakeOptions) ([]byte, error) {
 		options.IfaceComment = fmt.Sprintf("%s\n%s", options.IfaceComment, typeDoc)
 	}
 
-	result, err := MakeInterface(options.Comment, options.PkgName, options.IfaceName, options.IfaceComment, ifaceParms, allMethods, allImports)
+	result, err := MakeInterface(options.Comment, options.PkgName, options.IfaceName, options.IfaceComment, ifaceParams, allMethods, allImports)
 	if err != nil {
 		return nil, err
 	}
