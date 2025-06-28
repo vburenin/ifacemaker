@@ -2,6 +2,7 @@ package maker
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,8 +10,6 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -1039,4 +1038,104 @@ type BoxIface[T any] interface {
 }
 `
 	require.Equal(t, expected, string(result))
+}
+
+func TestGetTypeDeclarationName_NonTypeSpec(t *testing.T) {
+	gd := &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.ValueSpec{}}}
+	name := GetTypeDeclarationName(gd)
+	require.Equal(t, "", name)
+}
+
+func TestParseEmbeddingGraph_NonStruct(t *testing.T) {
+	src := []byte("package main\ntype Alias int")
+	graph := ParseEmbeddingGraph(src)
+	require.Empty(t, graph)
+}
+
+func TestParseEmbeddingGraph_ParseError(t *testing.T) {
+	if os.Getenv("BE_PEG_CRASHER") == "1" {
+		ParseEmbeddingGraph([]byte("invalid"))
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseEmbeddingGraph_ParseError")
+	cmd.Env = append(os.Environ(), "BE_PEG_CRASHER=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("ParseEmbeddingGraph did not exit as expected")
+}
+
+func TestMake_DuplicateEmbeddedStructs(t *testing.T) {
+	src := []byte(`package main
+    type B struct{}
+    type A struct{B; B}`)
+	tmp, err := os.CreateTemp("", "dupembed_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(src)
+	require.NoError(t, err)
+	tmp.Close()
+
+	_, err = Make(MakeOptions{
+		Files:        []string{tmp.Name()},
+		StructType:   "A",
+		Comment:      "c",
+		PkgName:      "main",
+		IfaceName:    "I",
+		WithPromoted: true,
+	})
+	require.NoError(t, err)
+}
+
+func TestMake_WithCopyTypeDoc(t *testing.T) {
+	src := []byte(`package docpkg
+    // MyStruct does things
+    type MyStruct struct{}`)
+	tmp, err := os.CreateTemp("", "copydoc_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(src)
+	require.NoError(t, err)
+	tmp.Close()
+
+	result, err := Make(MakeOptions{
+		Files:        []string{tmp.Name()},
+		StructType:   "MyStruct",
+		Comment:      "header",
+		PkgName:      "docpkg",
+		IfaceName:    "MyIface",
+		CopyTypeDoc:  true,
+		IfaceComment: "iface comment",
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(result), "// iface comment\n// MyStruct does things")
+}
+
+func TestMakeInterfaceError(t *testing.T) {
+	src := []byte(`package pkg
+type S struct{}`)
+	tmp, err := os.CreateTemp("", "ifaceerr_*.go")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(src)
+	require.NoError(t, err)
+	tmp.Close()
+	_, err = Make(MakeOptions{Files: []string{tmp.Name()}, StructType: "S", Comment: "c", PkgName: "pkg", IfaceName: "1bad"})
+	require.Error(t, err)
+}
+
+func TestParseStruct_DuplicateMethod(t *testing.T) {
+	src := []byte(`package main
+type Foo struct{}
+func (f *Foo) Bar() {}
+func (f *Foo) Bar() {}`)
+	methods, _, _, _ := ParseStruct(src, "Foo", true, true, "main", nil, "", false, nil, false)
+	count := 0
+	for _, m := range methods {
+		if strings.HasPrefix(m.Code, "Bar(") {
+			count++
+		}
+	}
+	require.Equal(t, 1, count)
 }

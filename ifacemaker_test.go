@@ -592,3 +592,23 @@ func captureStdout(f func()) string {
 	}
 	return buf.String()
 }
+func TestMainHelpDirect(t *testing.T) {
+	os.Args = []string{"cmd", "-h"}
+	out := captureStdout(func() { main() })
+	require.Contains(t, out, "Usage:")
+}
+
+func TestMainOutputWriteError(t *testing.T) {
+	if os.Getenv("BE_CRASHER_WRITEERR") == "1" {
+		os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-i", "Iface", "-p", "gen", "-o", "/dev/full"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=TestMainOutputWriteError")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_WRITEERR=1")
+	err := cmd.Run()
+	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
+		return
+	}
+	t.Fatalf("main did not exit as expected")
+}
