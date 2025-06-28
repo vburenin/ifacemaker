@@ -138,7 +138,11 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 //	map[<keyType>]*<type>
 //
 // Updated regex to support generic type parameters like Foo[T any].
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)(\w+)(?:\[.+\])?$`)
+// The prefix (e.g. pointers or collection modifiers) is optional so that
+// generic types without any modifiers are also matched correctly. The first
+// capture group contains the prefix, if any, and the second group contains the
+// base type name.
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)?(\w+)(\[.+\])?$`)
 
 // FormatFieldList takes in the source code
 // as a []byte and a FuncDecl parameters or
@@ -163,10 +167,13 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 		// match[0][0] = "[]Category"
 		// match[0][1] = "[]"
 		// match[0][2] = "Category"
-		match := reMatchTypename.FindAllStringSubmatch(t, -1)
+		match := reMatchTypename.FindStringSubmatch(t)
+		var prefix, generics string
 		if match != nil {
 			// Set `t` so it will compare correctly with `dt.Name` below
-			t2 = match[0][2]
+			prefix = match[1]
+			t2 = match[2]
+			generics = match[3]
 		}
 
 		for _, dt := range declaredTypes {
@@ -175,8 +182,8 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 				// and the source package is not the same as the destination package.
 				if match != nil {
 					// Add back `*`, `[]`, `[]*`, `map[<type>]` or `map[<type>]*` if there was a
-					// match.
-					t = match[0][1] + dt.Fullname()
+					// match and preserve generic parameters.
+					t = prefix + dt.Fullname() + generics
 				} else {
 					t = dt.Fullname()
 				}
@@ -515,7 +522,7 @@ func Make(options MakeOptions) ([]byte, error) {
 	)
 
 	var (
-		typeDoc    string
+		typeDoc     string
 		ifaceParams string
 	)
 
