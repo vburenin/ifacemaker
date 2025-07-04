@@ -202,7 +202,11 @@ func writeTestSourceFile(src, path string) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open test source file: %s", err))
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			panic(fmt.Sprintf("Failed to close test source file: %s", err))
+		}
+	}()
 	_, err = f.WriteString(src)
 	if err != nil {
 		panic("Failed to write to test source file.")
@@ -489,7 +493,9 @@ type Test interface {
 
 func TestMainWriteToFile(t *testing.T) {
 	outPath := filepath.Join(os.TempDir(), "ifacemaker_out.go")
-	os.Remove(outPath)
+	if err := os.Remove(outPath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to remove %s: %v", outPath, err)
+	}
 
 	os.Args = []string{"cmd", "-f", srcFile, "-s", "Person", "-p", "gen", "-c", "DO NOT EDIT: Auto generated", "-i", "PersonIface", "-y", "PersonIface is an interface for Person.", "-D"}
 	expected := captureStdout(func() { main() })
@@ -582,7 +588,9 @@ func captureStdout(f func()) string {
 
 	f()
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		fmt.Printf("error closing pipe: %v", err)
+	}
 	os.Stdout = old
 
 	var buf bytes.Buffer
