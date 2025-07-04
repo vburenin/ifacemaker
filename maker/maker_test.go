@@ -1040,6 +1040,21 @@ type BoxIface[T any] interface {
 	require.Equal(t, expected, string(result))
 }
 
+func TestGenericCrossPackageParam(t *testing.T) {
+	src := []byte(`package foo
+
+type Generic[T any] struct{}
+type Example[T any] struct{}
+
+func (e *Example[T]) Use(g Generic[T]) {}
+`)
+
+	types := ParseDeclaredTypes(src)
+	methods, _, _, _ := ParseStruct(src, "Example", true, true, "bar", types, "", false, nil, false)
+
+	require.Equal(t, "Use(g foo.Generic[T])", methods[0].Code)
+}
+
 func TestGetTypeDeclarationName_NonTypeSpec(t *testing.T) {
 	gd := &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.ValueSpec{}}}
 	name := GetTypeDeclarationName(gd)
