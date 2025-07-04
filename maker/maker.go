@@ -190,7 +190,10 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 			}
 		}
 
-		regexString := fmt.Sprintf(`(\*|\(|\s|^)%s\.`, regexp.QuoteMeta(pkgName))
+		// Strip destination package prefix when source code imports the
+		// same package we are generating into. This handles pointers,
+		// arrays, maps and other composite types.
+		regexString := fmt.Sprintf(`(^|[^\w])%s\.`, regexp.QuoteMeta(pkgName))
 		t = regexp.MustCompile(regexString).ReplaceAllString(t, "$1")
 
 		if len(names) > 0 {
