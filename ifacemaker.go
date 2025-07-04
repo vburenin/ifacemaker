@@ -86,7 +86,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.Fatal(err)
+			}
+		}()
 		if _, err := f.Write(result); err != nil {
 			log.Fatal(err)
 		}

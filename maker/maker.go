@@ -129,6 +129,27 @@ func GetReceiverType(fd *ast.FuncDecl) (ast.Expr, error) {
 	return fd.Recv.List[0].Type, nil
 }
 
+// getEmbeddedStructName returns the base struct name for an embedded field.
+// It unwraps pointers and generic instantiations to get the underlying type
+// identifier so embedded methods can be associated correctly.
+func getEmbeddedStructName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	case *ast.StarExpr:
+		return getEmbeddedStructName(e.X)
+	case *ast.IndexExpr:
+		return getEmbeddedStructName(e.X)
+	case *ast.IndexListExpr:
+		return getEmbeddedStructName(e.X)
+	default:
+		log.Printf("Unsupported ast.Expr type: %T", expr)
+		return ""
+	}
+}
+
 // reMatchTypename matches any of the following to extract the <type>:
 //
 //	*<type>
@@ -246,7 +267,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string,
 		if strings.HasPrefix(ifaceComment, "go:generate") {
 			prefix = "//"
 		}
-		output = append(output, fmt.Sprintf("%s%s", prefix, strings.Replace(ifaceComment, "\n", "\n// ", -1)))
+		output = append(output, fmt.Sprintf("%s%s", prefix, strings.ReplaceAll(ifaceComment, "\n", "\n// ")))
 	}
 	output = append(output, fmt.Sprintf("type %s%s interface {", ifaceName, typeParams))
 	output = append(output, methods...)
@@ -319,20 +340,9 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 					continue
 				}
 
-				// Track the relationship between embedded and pointer structs.
-				// Maps struct to embedded structs
-				switch t := fieldType.Type.(type) {
-				case *ast.Ident:
-					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], t.Name)
-				case *ast.SelectorExpr:
-					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], t.Sel.Name)
-				case *ast.StarExpr:
-					switch x := t.X.(type) {
-					case *ast.Ident:
-						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], x.Name)
-					case *ast.SelectorExpr:
-						embeddingGraph[childStructName] = append(embeddingGraph[childStructName], x.Sel.Name)
-					}
+				name := getEmbeddedStructName(fieldType.Type)
+				if name != "" {
+					embeddingGraph[childStructName] = append(embeddingGraph[childStructName], name)
 				}
 			}
 		}

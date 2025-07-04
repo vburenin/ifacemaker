@@ -167,6 +167,30 @@ type MyStruct struct {
 	require.ElementsMatch(t, []string{"External", "Pointer"}, graph["MyStruct"])
 }
 
+// Verify embedded generic struct instantiations are detected.
+func TestParseEmbeddingGraph_Generic(t *testing.T) {
+	src := []byte(`package main
+type Generic[T any] struct{}
+type MyStruct struct {
+       Generic[int]
+}`)
+	graph := ParseEmbeddingGraph(src)
+	require.Contains(t, graph, "MyStruct")
+	require.ElementsMatch(t, []string{"Generic"}, graph["MyStruct"])
+}
+
+// Verify pointer generic embeddings are also handled.
+func TestParseEmbeddingGraph_GenericPointer(t *testing.T) {
+	src := []byte(`package main
+type Generic[T any] struct{}
+type MyStruct struct {
+       *Generic[int]
+}`)
+	graph := ParseEmbeddingGraph(src)
+	require.Contains(t, graph, "MyStruct")
+	require.ElementsMatch(t, []string{"Generic"}, graph["MyStruct"])
+}
+
 func TestParseStruct(t *testing.T) {
 	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true, "", nil, "", false, nil, false)
 
@@ -508,12 +532,12 @@ func TestMakeStructNotFound(t *testing.T) {
 	// Create a temporary file with source that does not declare the expected struct.
 	tmpFile, err := os.CreateTemp("", "test*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := []byte("package main\nfunc Foo() {}")
 	_, err = tmpFile.Write(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	_, err = Make(MakeOptions{
 		Files:      []string{tmpFile.Name()},
@@ -594,7 +618,7 @@ func TestMakeExcludeMethod(t *testing.T) {
 	// Create a temporary file with a struct that has two methods: Foo and Bar.
 	tmpFile, err := os.CreateTemp("", "test_exclude_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	src := []byte(`package main
 type MyStruct struct {}
@@ -603,7 +627,7 @@ func (m *MyStruct) Bar() {}
 `)
 	_, err = tmpFile.Write(src)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:          []string{tmpFile.Name()},
@@ -632,17 +656,17 @@ func (m *MyStruct) Foo() {}
 `)
 	tmpFile1, err := os.CreateTemp("", "dup1_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile1.Name())
+	defer func() { _ = os.Remove(tmpFile1.Name()) }()
 	_, err = tmpFile1.Write(src1)
 	require.NoError(t, err)
-	tmpFile1.Close()
+	require.NoError(t, tmpFile1.Close())
 
 	tmpFile2, err := os.CreateTemp("", "dup2_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile2.Name())
+	defer func() { _ = os.Remove(tmpFile2.Name()) }()
 	_, err = tmpFile2.Write(src2)
 	require.NoError(t, err)
-	tmpFile2.Close()
+	require.NoError(t, tmpFile2.Close())
 
 	result, err := Make(MakeOptions{
 		Files:      []string{tmpFile1.Name(), tmpFile2.Name()},
@@ -664,14 +688,14 @@ func (m *MyStruct) Foo() {}
 func TestMake_NoMethods(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test_nomethods_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// The source contains a struct "MyStruct" with no methods.
 	content := []byte(`package main
 type MyStruct struct {}`)
 	_, err = tmpFile.Write(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:      []string{tmpFile.Name()},
@@ -826,13 +850,13 @@ func (f *Foo) Use(x []bar.Type) {}`)
 func TestMake_StructTypeNotFound_EmptyFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test_empty_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// File with no type declarations.
 	content := []byte("package main\n")
 	_, err = tmpFile.Write(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	_, err = Make(MakeOptions{
 		Files:      []string{tmpFile.Name()},
@@ -855,10 +879,10 @@ type MyStruct struct {}
 func (m *MyStruct) Foo() fmt.Stringer { return nil }`)
 	tmpFile1, err := os.CreateTemp("", "dupimports1_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile1.Name())
+	defer func() { _ = os.Remove(tmpFile1.Name()) }()
 	_, err = tmpFile1.Write(src1)
 	require.NoError(t, err)
-	tmpFile1.Close()
+	require.NoError(t, tmpFile1.Close())
 
 	// Create second temporary file with the same import and a method that uses fmt.Stringer.
 	src2 := []byte(`package main
@@ -867,10 +891,10 @@ type MyStruct struct {}
 func (m *MyStruct) Bar() fmt.Stringer { return nil }`)
 	tmpFile2, err := os.CreateTemp("", "dupimports2_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile2.Name())
+	defer func() { _ = os.Remove(tmpFile2.Name()) }()
 	_, err = tmpFile2.Write(src2)
 	require.NoError(t, err)
-	tmpFile2.Close()
+	require.NoError(t, tmpFile2.Close())
 
 	result, err := Make(MakeOptions{
 		Files:      []string{tmpFile1.Name(), tmpFile2.Name()},
@@ -892,7 +916,7 @@ func TestMake_WithPromoted(t *testing.T) {
 	// Create a temporary file with a struct that embeds another struct.
 	tmpFile, err := os.CreateTemp("", "test_withpromoted_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	src := []byte(`package main
 type EmbeddedStruct struct {}
@@ -904,7 +928,7 @@ type MyStruct struct {
 `)
 	_, err = tmpFile.Write(src)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:        []string{tmpFile.Name()},
@@ -925,7 +949,7 @@ func TestMake_WithPromotedPointer(t *testing.T) {
 	// Create a temporary file with a struct that embeds a pointer to another struct.
 	tmpFile, err := os.CreateTemp("", "test_withpromoted_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	src := []byte(`package main
 type EmbeddedStruct struct {}
@@ -937,7 +961,7 @@ type MyStruct struct {
 `)
 	_, err = tmpFile.Write(src)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:        []string{tmpFile.Name()},
@@ -957,7 +981,7 @@ type MyStruct struct {
 func TestMake_WithPromotedOverride(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "test_withpromoted_override_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	src := []byte(`package main
 type Base struct{}
@@ -970,7 +994,7 @@ func (s *Sub) Foo() int { return 0 }
 `)
 	_, err = tmpFile.Write(src)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:        []string{tmpFile.Name()},
@@ -1040,10 +1064,10 @@ func (b *Box[T]) Get() T { var zero T; return zero }
 
 	tmpFile, err := os.CreateTemp("", "generic_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 	_, err = tmpFile.Write(src)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	result, err := Make(MakeOptions{
 		Files:      []string{tmpFile.Name()},
@@ -1113,10 +1137,10 @@ func TestMake_DuplicateEmbeddedStructs(t *testing.T) {
     type A struct{B; B}`)
 	tmp, err := os.CreateTemp("", "dupembed_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	_, err = tmp.Write(src)
 	require.NoError(t, err)
-	tmp.Close()
+	require.NoError(t, tmp.Close())
 
 	_, err = Make(MakeOptions{
 		Files:        []string{tmp.Name()},
@@ -1135,10 +1159,10 @@ func TestMake_WithCopyTypeDoc(t *testing.T) {
     type MyStruct struct{}`)
 	tmp, err := os.CreateTemp("", "copydoc_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	_, err = tmp.Write(src)
 	require.NoError(t, err)
-	tmp.Close()
+	require.NoError(t, tmp.Close())
 
 	result, err := Make(MakeOptions{
 		Files:        []string{tmp.Name()},
@@ -1158,10 +1182,10 @@ func TestMakeInterfaceError(t *testing.T) {
 type S struct{}`)
 	tmp, err := os.CreateTemp("", "ifaceerr_*.go")
 	require.NoError(t, err)
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	_, err = tmp.Write(src)
 	require.NoError(t, err)
-	tmp.Close()
+	require.NoError(t, tmp.Close())
 	_, err = Make(MakeOptions{Files: []string{tmp.Name()}, StructType: "S", Comment: "c", PkgName: "pkg", IfaceName: "1bad"})
 	require.Error(t, err)
 }
