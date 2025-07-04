@@ -145,6 +145,7 @@ func getEmbeddedStructName(expr ast.Expr) string {
 	case *ast.IndexListExpr:
 		return getEmbeddedStructName(e.X)
 	default:
+		log.Printf("Unsupported ast.Expr type: %T", expr)
 		return ""
 	}
 }
