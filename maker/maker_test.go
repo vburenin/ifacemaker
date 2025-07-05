@@ -845,6 +845,32 @@ func (f *Foo) Use(x []bar.Type) {}`)
 	require.Equal(t, "x []Type", params[0])
 }
 
+// TestFormatFieldList_MultiDimSlice ensures nested slice modifiers are handled
+// when replacing types from a different package.
+func TestFormatFieldList_MultiDimSlice(t *testing.T) {
+	src := []byte(`package main
+type MyType struct{}
+type Foo struct{}
+func (f *Foo) Bar(x [][]MyType) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Bar" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
+	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	require.Len(t, params, 1)
+	require.Equal(t, "x [][]other.MyType", params[0])
+}
+
 // TestMake_StructTypeNotFound_EmptyFile covers the branch in Make()
 // where the declared struct type is not found in the input files.
 func TestMake_StructTypeNotFound_EmptyFile(t *testing.T) {

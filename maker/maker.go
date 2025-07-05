@@ -165,13 +165,35 @@ func getEmbeddedStructName(expr ast.Expr) string {
 // base type name.
 var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)?(\w+)(\[.+\])?$`)
 
-// FormatFieldList takes in the source code
-// as a []byte and a FuncDecl parameters or
-// return values as a FieldList.
-// It then returns a []string with each
-// param or return value as a single string.
-// If the FieldList input is nil, it returns
-// nil
+// baseIdentName returns the base identifier name from a type expression. It
+// recursively follows pointer, slice, map and generic expressions until the
+// underlying identifier is reached. If no identifier is present, an empty
+// string is returned.
+func baseIdentName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	case *ast.StarExpr:
+		return baseIdentName(e.X)
+	case *ast.ArrayType:
+		return baseIdentName(e.Elt)
+	case *ast.MapType:
+		return baseIdentName(e.Value)
+	case *ast.IndexExpr:
+		return baseIdentName(e.X)
+	case *ast.IndexListExpr:
+		return baseIdentName(e.X)
+	default:
+		return ""
+	}
+}
+
+// FormatFieldList takes in the source code as a []byte and a FuncDecl
+// parameters or return values as a FieldList. It returns a slice of strings
+// where each element is one parameter or return value formatted as it appears
+// in the source. If the FieldList input is nil, it returns nil.
 func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredTypes []declaredType) []string {
 	if fl == nil {
 		return nil
@@ -183,31 +205,27 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 			names[i] = n.Name
 		}
 		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		t2 := t
 		// Try to match <modifier><type>. If matched variable `match` will look like this for t=="[]Category":
 		// match[0][0] = "[]Category"
 		// match[0][1] = "[]"
 		// match[0][2] = "Category"
+		t2 := baseIdentName(l.Type)
 		match := reMatchTypename.FindStringSubmatch(t)
 		var prefix, generics string
 		if match != nil {
-			// Set `t` so it will compare correctly with `dt.Name` below
+			// Extract prefix (e.g. *[] or map[]) and generic parameters
 			prefix = match[1]
-			t2 = match[2]
 			generics = match[3]
 		}
 
 		for _, dt := range declaredTypes {
 			if t2 == dt.Name && pkgName != dt.Package {
-				// The type of this field is the same as one declared in the source package,
-				// and the source package is not the same as the destination package.
 				if match != nil {
-					// Add back `*`, `[]`, `[]*`, `map[<type>]` or `map[<type>]*` if there was a
-					// match and preserve generic parameters.
 					t = prefix + dt.Fullname() + generics
 				} else {
-					t = dt.Fullname()
+					t = strings.Replace(t, t2, dt.Fullname(), 1)
 				}
+				break
 			}
 		}
 
