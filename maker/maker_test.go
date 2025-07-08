@@ -1230,3 +1230,49 @@ func (f *Foo) Bar() {}`)
 	}
 	require.Equal(t, 1, count)
 }
+
+func TestFormatFieldList_Channel(t *testing.T) {
+	src := []byte(`package main
+type MyType struct{}
+func Foo(ch chan MyType) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
+	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	require.Len(t, params, 1)
+	require.Equal(t, "ch chan other.MyType", params[0])
+}
+
+func TestFormatFieldList_ParenExpr(t *testing.T) {
+	src := []byte(`package main
+type MyType struct{}
+func Foo(x (MyType)) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
+	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	require.Len(t, params, 1)
+	require.Equal(t, "x (other.MyType)", params[0])
+}

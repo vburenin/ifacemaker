@@ -187,6 +187,10 @@ func baseIdentName(expr ast.Expr) string {
 		return baseIdentName(e.X)
 	case *ast.Ellipsis:
 		return baseIdentName(e.Elt)
+	case *ast.ChanType:
+		return baseIdentName(e.Value)
+	case *ast.ParenExpr:
+		return baseIdentName(e.X)
 	default:
 		return ""
 	}
