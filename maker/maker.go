@@ -163,7 +163,7 @@ func getEmbeddedStructName(expr ast.Expr) string {
 // generic types without any modifiers are also matched correctly. The first
 // capture group contains the prefix, if any, and the second group contains the
 // base type name.
-var reMatchTypename = regexp.MustCompile(`^((\[\]|\*|map\[[^\]]+\])*)?(\w+)(\[.+\])?$`)
+var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)?(\w+)(\[.+\])?$`)
 
 // baseIdentName returns the base identifier name from a type expression. It
 // recursively follows pointer, slice, map and generic expressions until the
