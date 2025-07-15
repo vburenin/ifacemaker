@@ -268,6 +268,15 @@ func FormatCode(code string) ([]byte, error) {
 	return imports.Process("", []byte(code), opts)
 }
 
+// reMatchDirective matches with any go directive
+//
+// `go:build tag`
+// `go:generate command`
+// `go:embed file`
+//
+//	...
+var reMatchDirective = regexp.MustCompile(`^(//go|go):\S+`)
+
 // MakeInterface takes in all of the items
 // required for generating the interface,
 // it then simply concatenates them all
@@ -288,7 +297,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string,
 	)
 	if len(ifaceComment) > 0 {
 		prefix := "// "
-		if strings.HasPrefix(ifaceComment, "go:generate") {
+		if reMatchDirective.MatchString(ifaceComment) {
 			prefix = "//"
 		}
 		output = append(output, fmt.Sprintf("%s%s", prefix, strings.ReplaceAll(ifaceComment, "\n", "\n// ")))
@@ -454,7 +463,10 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			var docs []string
 			if fd.Doc != nil && copyDocs {
 				for _, d := range fd.Doc.List {
-					docs = append(docs, string(src[d.Pos()-1:d.End()-1]))
+					commentLine := string(src[d.Pos()-1 : d.End()-1])
+					if !reMatchDirective.MatchString(commentLine) {
+						docs = append(docs, commentLine)
+					}
 				}
 			}
 			methods = append(methods, Method{
@@ -490,7 +502,10 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				var docs []string
 				if fd.Doc != nil && copyDocs {
 					for _, d := range fd.Doc.List {
-						docs = append(docs, string(src[d.Pos()-1:d.End()-1]))
+						commentLine := string(src[d.Pos()-1 : d.End()-1])
+						if !reMatchDirective.MatchString(commentLine) {
+							docs = append(docs, commentLine)
+						}
 					}
 				}
 				methods = append(methods, Method{

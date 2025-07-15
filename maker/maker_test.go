@@ -106,6 +106,18 @@ type SomeType struct{}
 // Turing is a person
 type Turing struct {
 	*Person
+}
+
+// This is a Struct with a go:generate directive.
+//
+//go:generate echo "Generation Complete"
+type DirectedStruct struct{}
+
+// This function shouldn't be inlined
+//
+//go:noinline
+func (*DirectedStruct) DontInline() int {
+	return 42
 }`)
 )
 
@@ -251,6 +263,24 @@ func TestParseStructWithPromoted(t *testing.T) {
 	require.Equal(t, `notmain "fmt"`, trimmedImp)
 	require.Equal(t, "Turing is a person", typeDoc)
 }
+
+func TestParseStructWithDirective(t *testing.T) {
+	methods, imports, typeDoc, _ := ParseStruct(src, "DirectedStruct", true, true, "", nil, "", false, nil, false)
+	t.Log(methods)
+	t.Log(imports)
+	t.Log(typeDoc)
+
+	require.NotContains(t, typeDoc, "//go:generate")
+	require.Equal(t, "DontInline() (int)", methods[0].Code)
+	require.NotContains(t, methods[0].Docs, "//go:noinline")
+
+	imp := imports[0]
+	trimmedImp := strings.TrimSpace(imp)
+
+	require.Equal(t, `notmain "fmt"`, trimmedImp)
+	require.Equal(t, "This is a Struct with a go:generate directive.", typeDoc)
+}
+
 
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
