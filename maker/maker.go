@@ -591,7 +591,9 @@ func Make(options MakeOptions) ([]byte, error) {
 	for _, f := range options.Files {
 		absPath := f
 		if !filepath.IsAbs(absPath) {
-			if p, err := filepath.Abs(absPath); err == nil {
+			if p, err := filepath.Abs(absPath); err != nil {
+				log.Printf("maker: failed to convert %q to absolute path: %v", absPath, err)
+			} else {
 				absPath = p
 			}
 		}
