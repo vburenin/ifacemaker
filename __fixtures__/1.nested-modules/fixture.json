@@ -1,0 +1,12 @@
+{
+  "files": [
+    "dbgo/pets/queries.go",
+    "dbgo/notes/queries.go",
+    "pet_store/tools.go"
+  ],
+  "struct": "storage",
+  "iface": "Storage",
+  "pkg": "pet_store",
+  "promoted": true,
+  "output": "pet_store/storage.gen.go"
+}
