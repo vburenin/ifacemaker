@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -571,6 +572,7 @@ func Make(options MakeOptions) ([]byte, error) {
 		mset               = make(map[string]struct{})
 		iset               = make(map[string]struct{})
 		tset               = make(map[string]struct{})
+		parsedFiles        = make(map[string]struct{})
 	)
 
 	var (
@@ -578,29 +580,74 @@ func Make(options MakeOptions) ([]byte, error) {
 		ifaceParams string
 	)
 
-	// First pass on all files to find declared types
+	// First pass on all files to find declared types. In addition to the files
+	// explicitly provided via options.Files, also scan all other Go files in
+	// the same directories. This ensures we pick up types that may be declared
+	// in separate files (for example, sqlc-generated models.go) but are
+	// referenced from the methods we are generating an interface for.
 	for _, f := range options.Files {
-		b, err := os.ReadFile(f)
+		absPath := f
+		if !filepath.IsAbs(absPath) {
+			if p, err := filepath.Abs(absPath); err == nil {
+				absPath = p
+			}
+		}
+
+		parseAndCollect := func(path string) error {
+			if _, seen := parsedFiles[path]; seen {
+				return nil
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			parsedFiles[path] = struct{}{}
+
+			types := ParseDeclaredTypes(b)
+			graph := ParseEmbeddingGraph(b)
+
+			// Track if we've seen the input Struct type
+			for _, t := range types {
+				if _, ok := tset[t.Fullname()]; !ok {
+					allDeclaredTypes = append(allDeclaredTypes, t)
+					tset[t.Fullname()] = struct{}{}
+				}
+			}
+
+			// Track the full call graph
+			for key, values := range graph {
+				if _, ok := fullEmbeddingGraph[key]; !ok {
+					fullEmbeddingGraph[key] = []string{}
+				}
+				fullEmbeddingGraph[key] = append(fullEmbeddingGraph[key], values...)
+			}
+			return nil
+		}
+
+		// Parse the explicitly requested file.
+		if err := parseAndCollect(absPath); err != nil {
+			return []byte{}, err
+		}
+
+		// Additionally, parse all other Go files in the same directory to
+		// discover related type declarations and embeddings.
+		dir := filepath.Dir(absPath)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return []byte{}, err
 		}
-		types := ParseDeclaredTypes(b)
-		graph := ParseEmbeddingGraph(b)
-
-		// Track if we've seen the input Struct type
-		for _, t := range types {
-			if _, ok := tset[t.Fullname()]; !ok {
-				allDeclaredTypes = append(allDeclaredTypes, t)
-				tset[t.Fullname()] = struct{}{}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
 			}
-		}
-
-		// Track the full call graph
-		for key, values := range graph {
-			if _, ok := fullEmbeddingGraph[key]; !ok {
-				fullEmbeddingGraph[key] = []string{}
+			name := e.Name()
+			if !strings.HasSuffix(name, ".go") {
+				continue
 			}
-			fullEmbeddingGraph[key] = append(fullEmbeddingGraph[key], values...)
+			path := filepath.Join(dir, name)
+			if err := parseAndCollect(path); err != nil {
+				return []byte{}, err
+			}
 		}
 	}
 
