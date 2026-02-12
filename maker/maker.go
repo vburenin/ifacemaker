@@ -581,10 +581,13 @@ func Make(options MakeOptions) ([]byte, error) {
 	)
 
 	// First pass on all files to find declared types. In addition to the files
-	// explicitly provided via options.Files, also scan all other Go files in
-	// the same directories. This ensures we pick up types that may be declared
-	// in separate files (for example, sqlc-generated models.go) but are
-	// referenced from the methods we are generating an interface for.
+	// explicitly provided via options.Files, we deliberately scan all Go files
+	// in the same directories, not just those that appear “related” to the
+	// target methods. This ensures we pick up types that may be declared in
+	// separate or generated files (for example, sqlc-generated models.go)
+	// without requiring explicit imports or additional configuration from the
+	// caller, and matches Go’s convention that a package is defined by all
+	// .go files in a directory.
 	for _, f := range options.Files {
 		absPath := f
 		if !filepath.IsAbs(absPath) {
