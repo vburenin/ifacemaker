@@ -644,6 +644,9 @@ func Make(options MakeOptions) ([]byte, error) {
 			if !strings.HasSuffix(name, ".go") {
 				continue
 			}
+			if strings.HasSuffix(name, "_test.go") {
+				continue
+			}
 			path := filepath.Join(dir, name)
 			if err := parseAndCollect(path); err != nil {
 				return []byte{}, err
