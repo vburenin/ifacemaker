@@ -7,7 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -133,7 +133,8 @@ func TestLines(t *testing.T) {
 }
 
 func TestParseDeclaredTypes(t *testing.T) {
-	declaredTypes := ParseDeclaredTypes(src)
+	declaredTypes, err := ParseDeclaredTypes(src)
+	require.NoError(t, err)
 
 	require.Equal(t, declaredType{
 		Name:    "Person",
@@ -154,7 +155,8 @@ type (
     First int
     Second string
 )`)
-	types := ParseDeclaredTypes(multiSrc)
+	types, err := ParseDeclaredTypes(multiSrc)
+	require.NoError(t, err)
 	require.Equal(t, []declaredType{
 		{Name: "First", Package: "main"},
 		{Name: "Second", Package: "main"},
@@ -162,7 +164,8 @@ type (
 }
 
 func TestParseEmbeddingGraph(t *testing.T) {
-	callGraph := ParseEmbeddingGraph(src)
+	callGraph, err := ParseEmbeddingGraph(src)
+	require.NoError(t, err)
 	require.Equal(t, "Person", callGraph["Turing"][0])
 }
 
@@ -174,7 +177,8 @@ type MyStruct struct {
     otherpkg.External
     *otherpkg.Pointer
 }`)
-	graph := ParseEmbeddingGraph(extSrc)
+	graph, err := ParseEmbeddingGraph(extSrc)
+	require.NoError(t, err)
 	require.Contains(t, graph, "MyStruct")
 	require.ElementsMatch(t, []string{"External", "Pointer"}, graph["MyStruct"])
 }
@@ -186,7 +190,8 @@ type Generic[T any] struct{}
 type MyStruct struct {
        Generic[int]
 }`)
-	graph := ParseEmbeddingGraph(src)
+	graph, err := ParseEmbeddingGraph(src)
+	require.NoError(t, err)
 	require.Contains(t, graph, "MyStruct")
 	require.ElementsMatch(t, []string{"Generic"}, graph["MyStruct"])
 }
@@ -198,13 +203,15 @@ type Generic[T any] struct{}
 type MyStruct struct {
        *Generic[int]
 }`)
-	graph := ParseEmbeddingGraph(src)
+	graph, err := ParseEmbeddingGraph(src)
+	require.NoError(t, err)
 	require.Contains(t, graph, "MyStruct")
 	require.ElementsMatch(t, []string{"Generic"}, graph["MyStruct"])
 }
 
 func TestParseStruct(t *testing.T) {
-	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true, "", nil, "", false, nil, false)
+	methods, imports, typeDoc, _, err := ParseStruct(src, "Person", "main", true, true, "", nil, "", false, nil, false)
+	require.NoError(t, err)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -216,7 +223,8 @@ func TestParseStruct(t *testing.T) {
 }
 
 func TestParseStructWithImportModule(t *testing.T) {
-	methods, imports, typeDoc, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", false, nil, false)
+	methods, imports, typeDoc, _, err := ParseStruct(src, "Person", "main", true, true, "", nil, "github.com/test/test", false, nil, false)
+	require.NoError(t, err)
 
 	require.Equal(t, "Name() (string)", methods[0].Code)
 
@@ -229,7 +237,8 @@ func TestParseStructWithImportModule(t *testing.T) {
 }
 
 func TestParseStructWithNotExported(t *testing.T) {
-	methods, _, _, _ := ParseStruct(src, "Person", true, true, "", nil, "github.com/test/test", true, nil, false)
+	methods, _, _, _, err := ParseStruct(src, "Person", "main", true, true, "", nil, "github.com/test/test", true, nil, false)
+	require.NoError(t, err)
 
 	var oneExists, twoExists bool
 	for _, method := range methods {
@@ -250,7 +259,8 @@ func TestParseStructWithPromoted(t *testing.T) {
 	callGraph := map[string]struct{}{
 		"Person": {},
 	}
-	methods, imports, typeDoc, _ := ParseStruct(src, "Turing", true, true, "", nil, "", false, callGraph, true)
+	methods, imports, typeDoc, _, err := ParseStruct(src, "Turing", "main", true, true, "", nil, "", false, callGraph, true)
+	require.NoError(t, err)
 	t.Log(methods)
 	t.Log(imports)
 	t.Log(typeDoc)
@@ -265,7 +275,8 @@ func TestParseStructWithPromoted(t *testing.T) {
 }
 
 func TestParseStructWithDirective(t *testing.T) {
-	methods, imports, typeDoc, _ := ParseStruct(src, "DirectedStruct", true, true, "", nil, "", false, nil, false)
+	methods, imports, typeDoc, _, err := ParseStruct(src, "DirectedStruct", "main", true, true, "", nil, "", false, nil, false)
+	require.NoError(t, err)
 	t.Log(methods)
 	t.Log(imports)
 	t.Log(typeDoc)
@@ -312,8 +323,8 @@ func TestFormatFieldList(t *testing.T) {
 	for _, d := range a.Decls {
 		if a, fd := GetReceiverTypeName(src, d); a == "Person" {
 			methodName := fd.Name.String()
-			params := FormatFieldList(src, fd.Type.Params, "main", nil)
-			results := FormatFieldList(src, fd.Type.Results, "main", nil)
+			params := FormatFieldList(src, fd.Type.Params, "main", "main", nil)
+			results := FormatFieldList(src, fd.Type.Results, "main", "main", nil)
 
 			var expectedParams []string
 			var expectedResults []string
@@ -356,7 +367,8 @@ func TestFormatFieldList(t *testing.T) {
 }
 
 func TestNoCopyTypeDocs(t *testing.T) {
-	_, _, typeDoc, _ := ParseStruct(src, "Person", true, false, "", nil, "", false, nil, false)
+	_, _, typeDoc, _, err := ParseStruct(src, "Person", "main", true, false, "", nil, "", false, nil, false)
+	require.NoError(t, err)
 	require.Equal(t, "", typeDoc)
 }
 
@@ -554,7 +566,7 @@ func TestFormatCodeInvalid(t *testing.T) {
 }
 
 func TestFormatFieldList_Nil(t *testing.T) {
-	parts := FormatFieldList([]byte(""), nil, "main", nil)
+	parts := FormatFieldList([]byte(""), nil, "main", "main", nil)
 	require.Nil(t, parts)
 }
 
@@ -596,7 +608,8 @@ func TestMakeFileNotFound(t *testing.T) {
 // TestParseDeclaredTypesEmpty ensures that a source with no type declarations returns an empty slice.
 func TestParseDeclaredTypesEmpty(t *testing.T) {
 	src := []byte("package main\nfunc Foo() {}")
-	types := ParseDeclaredTypes(src)
+	types, err := ParseDeclaredTypes(src)
+	require.NoError(t, err)
 	require.Empty(t, types)
 }
 
@@ -616,7 +629,7 @@ func Foo(a, b int) int { return 0 }`)
 		}
 	}
 	require.NotNil(t, fd)
-	params := FormatFieldList(src, fd.Type.Params, "main", nil)
+	params := FormatFieldList(src, fd.Type.Params, "main", "main", nil)
 	// Expect parameters to be formatted as "a, b int"
 	require.Contains(t, params, "a, b int")
 }
@@ -764,7 +777,8 @@ type MyStruct struct {}`)
 // replaces a field type that matches a declared type (with names present)
 func TestFormatFieldList_Replaced_WithNames(t *testing.T) {
 	// The source has a parameter "x []MyType"
-	src := []byte(`package main
+	src := []byte(`package other
+type MyType struct{}
 func Foo(x []MyType) {}`)
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -780,12 +794,11 @@ func Foo(x []MyType) {}`)
 	}
 	require.NotNil(t, fd)
 
-	// declaredTypes contains MyType but with a different package so that replacement occurs.
+	// declaredTypes contains MyType in the source package so that cross-package qualification occurs.
 	declaredTypes := []declaredType{
 		{Name: "MyType", Package: "other"},
 	}
-	// Call FormatFieldList with pkgName "main"
-	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
 	// Expect the type "[]MyType" to be replaced with "[]other.MyType"
 	require.Len(t, params, 1)
 	require.Equal(t, "x []other.MyType", params[0])
@@ -794,7 +807,8 @@ func Foo(x []MyType) {}`)
 // TestFormatFieldList_UnnamedReturn verifies FormatFieldList on a return field list with no names.
 func TestFormatFieldList_UnnamedReturn(t *testing.T) {
 	// The function returns an unnamed []MyType.
-	src := []byte(`package main
+	src := []byte(`package other
+type MyType struct{}
 func Foo() []MyType { return nil }`)
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -813,7 +827,7 @@ func Foo() []MyType { return nil }`)
 	declaredTypes := []declaredType{
 		{Name: "MyType", Package: "other"},
 	}
-	results := FormatFieldList(src, fd.Type.Results, "main", declaredTypes)
+	results := FormatFieldList(src, fd.Type.Results, "other", "main", declaredTypes)
 	// When there are no names, the type string itself is added.
 	require.Len(t, results, 1)
 	require.Equal(t, "[]other.MyType", results[0])
@@ -823,7 +837,8 @@ func Foo() []MyType { return nil }`)
 // where there is no regex match and t is set via dt.Fullname().
 func TestFormatFieldList_NoModifier(t *testing.T) {
 	// Source with a parameter type "MyType" (no modifier like "*" or "[]")
-	src := []byte(`package main
+	src := []byte(`package other
+type MyType struct{}
 func Foo(x MyType) {}`)
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -844,7 +859,7 @@ func Foo(x MyType) {}`)
 	}
 	// When pkgName ("main") is different from dt.Package ("other"),
 	// the type should be replaced with dt.Fullname() ("other.MyType").
-	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
 	require.Len(t, params, 1)
 	require.Equal(t, "x other.MyType", params[0])
 }
@@ -870,7 +885,7 @@ func (f *Foo) Use(x []bar.Type) {}`)
 	}
 	require.NotNil(t, fd)
 
-	params := FormatFieldList(src, fd.Type.Params, "bar", nil)
+	params := FormatFieldList(src, fd.Type.Params, "foo", "bar", nil)
 	require.Len(t, params, 1)
 	require.Equal(t, "x []Type", params[0])
 }
@@ -878,7 +893,7 @@ func (f *Foo) Use(x []bar.Type) {}`)
 // TestFormatFieldList_MultiDimSlice ensures nested slice modifiers are handled
 // when replacing types from a different package.
 func TestFormatFieldList_MultiDimSlice(t *testing.T) {
-	src := []byte(`package main
+	src := []byte(`package other
 type MyType struct{}
 type Foo struct{}
 func (f *Foo) Bar(x [][]MyType) {}`)
@@ -896,9 +911,32 @@ func (f *Foo) Bar(x [][]MyType) {}`)
 	require.NotNil(t, fd)
 
 	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
-	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
 	require.Len(t, params, 1)
 	require.Equal(t, "x [][]other.MyType", params[0])
+}
+
+func TestFormatFieldList_MapKeyAndValue(t *testing.T) {
+	src := []byte(`package other
+type MyType struct{}
+func Foo(x map[MyType][]MyType) {}`)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	var fd *ast.FuncDecl
+	for _, d := range file.Decls {
+		if f, ok := d.(*ast.FuncDecl); ok && f.Name.Name == "Foo" {
+			fd = f
+			break
+		}
+	}
+	require.NotNil(t, fd)
+
+	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
+	require.Len(t, params, 1)
+	require.Equal(t, "x map[other.MyType][]other.MyType", params[0])
 }
 
 // TestMake_StructTypeNotFound_EmptyFile covers the branch in Make()
@@ -1067,41 +1105,14 @@ func (s *Sub) Foo() int { return 0 }
 	require.NotContains(t, outStr, "Foo() string")
 }
 
-// TestParseDeclaredTypes_Fatal runs ParseDeclaredTypes with invalid Go code.
-// Because ParseDeclaredTypes calls log.Fatal on parse errors, we run this in a subprocess.
-func TestParseDeclaredTypes_Fatal(t *testing.T) {
-	if os.Getenv("BE_CRASHER") == "1" {
-		// Provide invalid Go source to force a parse error
-		ParseDeclaredTypes([]byte("invalid go code"))
-		// This point should not be reached because log.Fatal should exit.
-		return
-	}
-	// Re-run this test in a subprocess so that the os.Exit call can be observed.
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseDeclaredTypes_Fatal")
-	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
-	err := cmd.Run()
-	// An exit error is expected due to log.Fatal.
-	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
-		return // Test passed.
-	}
-	t.Fatalf("ParseDeclaredTypes did not exit as expected")
+func TestParseDeclaredTypes_Error(t *testing.T) {
+	_, err := ParseDeclaredTypes([]byte("invalid go code"))
+	require.Error(t, err)
 }
 
-// TestParseStruct_Fatal runs ParseStruct with invalid Go source.
-// Since ParseStruct calls log.Fatal on parse errors, we capture that via a subprocess.
-func TestParseStruct_Fatal(t *testing.T) {
-	if os.Getenv("BE_CRASHER") == "1" {
-		// Provide invalid source code to trigger parser.ParseFile error inside ParseStruct.
-		ParseStruct([]byte("invalid go code"), "Foo", true, true, "", nil, "", false, nil, false)
-		return
-	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseStruct_Fatal")
-	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
-	err := cmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
-		return // Test passed.
-	}
-	t.Fatalf("ParseStruct did not exit as expected")
+func TestParseStruct_Error(t *testing.T) {
+	_, _, _, _, err := ParseStruct([]byte("invalid go code"), "Foo", "main", true, true, "", nil, "", false, nil, false)
+	require.Error(t, err)
 }
 
 func TestGenericsSupport(t *testing.T) {
@@ -1113,7 +1124,8 @@ func (b *Box[T]) Add(v T) {}
 func (b *Box[T]) Get() T { var zero T; return zero }
 `)
 
-	methods, _, _, typeParams := ParseStruct(src, "Box", true, true, "generic", nil, "", false, nil, false)
+	methods, _, _, typeParams, err := ParseStruct(src, "Box", "generic", true, true, "generic", nil, "", false, nil, false)
+	require.NoError(t, err)
 	require.Equal(t, "[T any]", typeParams)
 	require.Equal(t, "Add(v T)", methods[0].Code)
 	require.Equal(t, "Get() (T)", methods[1].Code)
@@ -1155,8 +1167,10 @@ type Example[T any] struct{}
 func (e *Example[T]) Use(g Generic[T]) {}
 `)
 
-	types := ParseDeclaredTypes(src)
-	methods, _, _, _ := ParseStruct(src, "Example", true, true, "bar", types, "", false, nil, false)
+	types, err := ParseDeclaredTypes(src)
+	require.NoError(t, err)
+	methods, _, _, _, err := ParseStruct(src, "Example", "foo", true, true, "bar", types, "", false, nil, false)
+	require.NoError(t, err)
 
 	require.Equal(t, "Use(g foo.Generic[T])", methods[0].Code)
 }
@@ -1169,22 +1183,14 @@ func TestGetTypeDeclarationName_NonTypeSpec(t *testing.T) {
 
 func TestParseEmbeddingGraph_NonStruct(t *testing.T) {
 	src := []byte("package main\ntype Alias int")
-	graph := ParseEmbeddingGraph(src)
+	graph, err := ParseEmbeddingGraph(src)
+	require.NoError(t, err)
 	require.Empty(t, graph)
 }
 
 func TestParseEmbeddingGraph_ParseError(t *testing.T) {
-	if os.Getenv("BE_PEG_CRASHER") == "1" {
-		ParseEmbeddingGraph([]byte("invalid"))
-		return
-	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseEmbeddingGraph_ParseError")
-	cmd.Env = append(os.Environ(), "BE_PEG_CRASHER=1")
-	err := cmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok && !exitErr.Success() {
-		return
-	}
-	t.Fatalf("ParseEmbeddingGraph did not exit as expected")
+	_, err := ParseEmbeddingGraph([]byte("invalid"))
+	require.Error(t, err)
 }
 
 func TestMake_DuplicateEmbeddedStructs(t *testing.T) {
@@ -1233,6 +1239,32 @@ func TestMake_WithCopyTypeDoc(t *testing.T) {
 	require.Contains(t, string(result), "// iface comment\n// MyStruct does things")
 }
 
+func TestMake_AmbiguousStructAcrossPackages(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "ifacemaker-ambiguous-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	file1 := filepath.Join(tmpDir, "foo.go")
+	file2 := filepath.Join(tmpDir, "bar.go")
+
+	require.NoError(t, os.WriteFile(file1, []byte(`package foo
+type Dup struct{}
+func (d *Dup) Foo() {}`), 0o600))
+	require.NoError(t, os.WriteFile(file2, []byte(`package bar
+type Dup struct{}
+func (d *Dup) Bar() {}`), 0o600))
+
+	_, err = Make(MakeOptions{
+		Files:      []string{file1, file2},
+		StructType: "Dup",
+		Comment:    "c",
+		PkgName:    "gen",
+		IfaceName:  "DupIface",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `"Dup" structtype is ambiguous across multiple packages`)
+}
+
 func TestMakeInterfaceError(t *testing.T) {
 	src := []byte(`package pkg
 type S struct{}`)
@@ -1251,7 +1283,8 @@ func TestParseStruct_DuplicateMethod(t *testing.T) {
 type Foo struct{}
 func (f *Foo) Bar() {}
 func (f *Foo) Bar() {}`)
-	methods, _, _, _ := ParseStruct(src, "Foo", true, true, "main", nil, "", false, nil, false)
+	methods, _, _, _, err := ParseStruct(src, "Foo", "main", true, true, "main", nil, "", false, nil, false)
+	require.NoError(t, err)
 	count := 0
 	for _, m := range methods {
 		if strings.HasPrefix(m.Code, "Bar(") {
@@ -1262,7 +1295,7 @@ func (f *Foo) Bar() {}`)
 }
 
 func TestFormatFieldList_Channel(t *testing.T) {
-	src := []byte(`package main
+	src := []byte(`package other
 type MyType struct{}
 func Foo(ch chan MyType) {}`)
 	fset := token.NewFileSet()
@@ -1279,13 +1312,13 @@ func Foo(ch chan MyType) {}`)
 	require.NotNil(t, fd)
 
 	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
-	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
 	require.Len(t, params, 1)
 	require.Equal(t, "ch chan other.MyType", params[0])
 }
 
 func TestFormatFieldList_ParenExpr(t *testing.T) {
-	src := []byte(`package main
+	src := []byte(`package other
 type MyType struct{}
 func Foo(x (MyType)) {}`)
 	fset := token.NewFileSet()
@@ -1302,7 +1335,7 @@ func Foo(x (MyType)) {}`)
 	require.NotNil(t, fd)
 
 	declaredTypes := []declaredType{{Name: "MyType", Package: "other"}}
-	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
+	params := FormatFieldList(src, fd.Type.Params, "other", "main", declaredTypes)
 	require.Len(t, params, 1)
 	require.Equal(t, "x (other.MyType)", params[0])
 }

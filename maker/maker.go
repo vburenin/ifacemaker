@@ -1,10 +1,12 @@
 package maker
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/doc"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"log"
 	"os"
@@ -150,96 +152,121 @@ func getEmbeddedStructName(expr ast.Expr) string {
 	}
 }
 
-// reMatchTypename matches any of the following to extract the <type>:
-//
-//	*<type>
-//	[]<type>
-//	[]*<type>
-//	map[<keyType>]<type>
-//	map[<keyType>]*<type>
-//
-// Updated regex to support generic type parameters like Foo[T any].
-// The prefix (e.g. pointers or collection modifiers) is optional so that
-// generic types without any modifiers are also matched correctly. The first
-// capture group contains the prefix, if any, and the second group contains the
-// base type name.
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)?(\w+)(\[.+\])?$`)
+func copyFieldNames(names []*ast.Ident) []*ast.Ident {
+	out := make([]*ast.Ident, 0, len(names))
+	for _, name := range names {
+		out = append(out, ast.NewIdent(name.Name))
+	}
+	return out
+}
 
-// baseIdentName returns the base identifier name from a type expression. It
-// recursively follows pointer, slice, map and generic expressions until the
-// underlying identifier is reached. If no identifier is present, an empty
-// string is returned.
-func baseIdentName(expr ast.Expr) string {
+func rewriteFieldListTypes(fl *ast.FieldList, sourcePkg, destPkg string, localTypes map[string]struct{}) *ast.FieldList {
+	if fl == nil {
+		return nil
+	}
+
+	fields := make([]*ast.Field, 0, len(fl.List))
+	for _, field := range fl.List {
+		fields = append(fields, &ast.Field{
+			Names: copyFieldNames(field.Names),
+			Type:  rewriteTypeExpr(field.Type, sourcePkg, destPkg, localTypes),
+		})
+	}
+
+	return &ast.FieldList{List: fields}
+}
+
+func rewriteTypeExpr(expr ast.Expr, sourcePkg, destPkg string, localTypes map[string]struct{}) ast.Expr {
 	switch e := expr.(type) {
 	case *ast.Ident:
-		return e.Name
+		if _, ok := localTypes[e.Name]; ok && sourcePkg != "" && destPkg != "" && destPkg != sourcePkg {
+			return &ast.SelectorExpr{
+				X:   ast.NewIdent(sourcePkg),
+				Sel: ast.NewIdent(e.Name),
+			}
+		}
+		return ast.NewIdent(e.Name)
 	case *ast.SelectorExpr:
-		return e.Sel.Name
+		if pkgIdent, ok := e.X.(*ast.Ident); ok && pkgIdent.Name == destPkg {
+			return ast.NewIdent(e.Sel.Name)
+		}
+		return &ast.SelectorExpr{
+			X:   rewriteTypeExpr(e.X, sourcePkg, destPkg, localTypes),
+			Sel: ast.NewIdent(e.Sel.Name),
+		}
 	case *ast.StarExpr:
-		return baseIdentName(e.X)
+		return &ast.StarExpr{X: rewriteTypeExpr(e.X, sourcePkg, destPkg, localTypes)}
 	case *ast.ArrayType:
-		return baseIdentName(e.Elt)
+		return &ast.ArrayType{Len: e.Len, Elt: rewriteTypeExpr(e.Elt, sourcePkg, destPkg, localTypes)}
 	case *ast.MapType:
-		return baseIdentName(e.Value)
+		return &ast.MapType{
+			Key:   rewriteTypeExpr(e.Key, sourcePkg, destPkg, localTypes),
+			Value: rewriteTypeExpr(e.Value, sourcePkg, destPkg, localTypes),
+		}
 	case *ast.IndexExpr:
-		return baseIdentName(e.X)
+		return &ast.IndexExpr{
+			X:     rewriteTypeExpr(e.X, sourcePkg, destPkg, localTypes),
+			Index: rewriteTypeExpr(e.Index, sourcePkg, destPkg, localTypes),
+		}
 	case *ast.IndexListExpr:
-		return baseIdentName(e.X)
+		indices := make([]ast.Expr, 0, len(e.Indices))
+		for _, index := range e.Indices {
+			indices = append(indices, rewriteTypeExpr(index, sourcePkg, destPkg, localTypes))
+		}
+		return &ast.IndexListExpr{
+			X:       rewriteTypeExpr(e.X, sourcePkg, destPkg, localTypes),
+			Indices: indices,
+		}
 	case *ast.Ellipsis:
-		return baseIdentName(e.Elt)
+		return &ast.Ellipsis{Elt: rewriteTypeExpr(e.Elt, sourcePkg, destPkg, localTypes)}
 	case *ast.ChanType:
-		return baseIdentName(e.Value)
+		return &ast.ChanType{Dir: e.Dir, Value: rewriteTypeExpr(e.Value, sourcePkg, destPkg, localTypes)}
 	case *ast.ParenExpr:
-		return baseIdentName(e.X)
+		return &ast.ParenExpr{X: rewriteTypeExpr(e.X, sourcePkg, destPkg, localTypes)}
+	case *ast.FuncType:
+		return &ast.FuncType{
+			Params:  rewriteFieldListTypes(e.Params, sourcePkg, destPkg, localTypes),
+			Results: rewriteFieldListTypes(e.Results, sourcePkg, destPkg, localTypes),
+		}
 	default:
+		return expr
+	}
+}
+
+func formatExpr(expr ast.Expr) string {
+	var buf bytes.Buffer
+	if err := printer.Fprint(&buf, token.NewFileSet(), expr); err != nil {
 		return ""
 	}
+	return buf.String()
 }
 
 // FormatFieldList takes in the source code as a []byte and a FuncDecl
 // parameters or return values as a FieldList. It returns a slice of strings
 // where each element is one parameter or return value formatted as it appears
 // in the source. If the FieldList input is nil, it returns nil.
-func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredTypes []declaredType) []string {
+func FormatFieldList(src []byte, fl *ast.FieldList, sourcePkg string, pkgName string, declaredTypes []declaredType) []string {
 	if fl == nil {
 		return nil
 	}
+
+	localTypes := make(map[string]struct{})
+	for _, dt := range declaredTypes {
+		if dt.Package == sourcePkg {
+			localTypes[dt.Name] = struct{}{}
+		}
+	}
+
 	var parts []string
 	for _, l := range fl.List {
 		names := make([]string, len(l.Names))
 		for i, n := range l.Names {
 			names[i] = n.Name
 		}
-		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		// Try to match <modifier><type>. If matched variable `match` will look like this for t=="[]Category":
-		// match[0][0] = "[]Category"
-		// match[0][1] = "[]"
-		// match[0][2] = "Category"
-		t2 := baseIdentName(l.Type)
-		match := reMatchTypename.FindStringSubmatch(t)
-		var prefix, generics string
-		if match != nil {
-			// Extract prefix (e.g. *[] or map[]) and generic parameters
-			prefix = match[1]
-			generics = match[3]
+		t := formatExpr(rewriteTypeExpr(l.Type, sourcePkg, pkgName, localTypes))
+		if t == "" {
+			t = string(src[l.Type.Pos()-1 : l.Type.End()-1])
 		}
-
-		for _, dt := range declaredTypes {
-			if t2 == dt.Name && pkgName != dt.Package {
-				if match != nil {
-					t = prefix + dt.Fullname() + generics
-				} else {
-					t = strings.Replace(t, t2, dt.Fullname(), 1)
-				}
-				break
-			}
-		}
-
-		// Strip destination package prefix when source code imports the
-		// same package we are generating into. This handles pointers,
-		// arrays, maps and other composite types.
-		regexString := fmt.Sprintf(`(^|[^\w])%s\.`, regexp.QuoteMeta(pkgName))
-		t = regexp.MustCompile(regexString).ReplaceAllString(t, "$1")
 
 		if len(names) > 0 {
 			typeSharingArgs := strings.Join(names, ", ")
@@ -310,11 +337,11 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string,
 }
 
 // ParseDeclaredTypes inspect given src code to find type declaractions.
-func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
+func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType, err error) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 
 	sourcePackageName := a.Name.Name
@@ -328,16 +355,16 @@ func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType) {
 		}
 	}
 
-	return
+	return declaredTypes, nil
 }
 
 // ParseEmbeddingGraph inspects the given source code to find
 // the embedding relationship between structs
-func ParseEmbeddingGraph(src []byte) map[string][]string {
+func ParseEmbeddingGraph(src []byte) (map[string][]string, error) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, "src.go", src, parser.ParseComments)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 
 	// Track the embedding graph
@@ -381,7 +408,7 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 		}
 	}
 
-	return embeddingGraph
+	return embeddingGraph, nil
 }
 
 // ParseStruct takes in a piece of source code as a
@@ -396,11 +423,16 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 // not, the imports not used will be removed later using the
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
-func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string) {
+func ParseStruct(src []byte, structName string, structPackage string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string, err error) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, nil, "", "", err
+	}
+
+	sourcePackageName := a.Name.Name
+	if structPackage != "" && sourcePackageName != structPackage {
+		return nil, nil, "", "", nil
 	}
 
 	// Extract type parameters for the struct if present.
@@ -449,8 +481,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			if !withNotExported && !fd.Name.IsExported() {
 				continue
 			}
-			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
-			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+			params := FormatFieldList(src, fd.Type.Params, sourcePackageName, pkgName, declaredTypes)
+			ret := FormatFieldList(src, fd.Type.Results, sourcePackageName, pkgName, declaredTypes)
 
 			mName = fd.Name.String()
 			method := ""
@@ -491,8 +523,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
-				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
-				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+				params := FormatFieldList(src, fd.Type.Params, sourcePackageName, pkgName, declaredTypes)
+				ret := FormatFieldList(src, fd.Type.Results, sourcePackageName, pkgName, declaredTypes)
 				method := ""
 				if len(ret) == 0 {
 					method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
@@ -529,7 +561,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		}
 	}
 
-	return
+	return methods, imports, typeDoc, typeParams, nil
 }
 
 // MakeOptions contains options for the Make function.
@@ -548,17 +580,24 @@ type MakeOptions struct {
 	WithNotExported bool
 }
 
-// validateStructType checks input struct type against the parsed declared
-// types and returns true when present
-func validateStructType(types []declaredType, stType string) bool {
+// resolveStructPackage checks input struct type against the parsed declared
+// types and returns the unique package that owns it.
+func resolveStructPackage(types []declaredType, stType string) (string, error) {
+	packages := make(map[string]struct{})
 	for _, v := range types {
 		if v.Name == stType {
-			return true
+			packages[v.Package] = struct{}{}
 		}
-
 	}
-	return false
-
+	switch len(packages) {
+	case 0:
+		return "", fmt.Errorf("%q structtype not found in input files", stType)
+	case 1:
+		for pkg := range packages {
+			return pkg, nil
+		}
+	}
+	return "", fmt.Errorf("%q structtype is ambiguous across multiple packages", stType)
 }
 
 func Make(options MakeOptions) ([]byte, error) {
@@ -576,6 +615,7 @@ func Make(options MakeOptions) ([]byte, error) {
 	var (
 		typeDoc     string
 		ifaceParams string
+		structPkg   string
 	)
 
 	// First pass on all files to find declared types
@@ -584,8 +624,14 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return []byte{}, err
 		}
-		types := ParseDeclaredTypes(b)
-		graph := ParseEmbeddingGraph(b)
+		types, err := ParseDeclaredTypes(b)
+		if err != nil {
+			return nil, err
+		}
+		graph, err := ParseEmbeddingGraph(b)
+		if err != nil {
+			return nil, err
+		}
 
 		// Track if we've seen the input Struct type
 		for _, t := range types {
@@ -605,10 +651,9 @@ func Make(options MakeOptions) ([]byte, error) {
 	}
 
 	// Validate at least one file contains the input struct Type
-	if !validateStructType(allDeclaredTypes, options.StructType) {
-		return []byte{},
-			fmt.Errorf("%q structtype not found in input files",
-				options.StructType)
+	structPkg, err = resolveStructPackage(allDeclaredTypes, options.StructType)
+	if err != nil {
+		return nil, err
 	}
 
 	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
@@ -637,7 +682,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc, parsedParams := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
+		methods, imports, parsedTypeDoc, parsedParams, err := ParseStruct(src, options.StructType, structPkg, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
+		if err != nil {
+			return nil, err
+		}
 		for _, m := range methods {
 			if _, ok := excludedMethods[m.Name]; ok {
 				continue
