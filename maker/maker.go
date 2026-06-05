@@ -336,7 +336,7 @@ func MakeInterface(comment, pkgName, ifaceName, ifaceComment, typeParams string,
 	return FormatCode(code)
 }
 
-// ParseDeclaredTypes inspect given src code to find type declaractions.
+// ParseDeclaredTypes inspect given src code to find type declarations.
 func ParseDeclaredTypes(src []byte) (declaredTypes []declaredType, err error) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
