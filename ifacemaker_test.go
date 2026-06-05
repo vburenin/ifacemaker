@@ -380,8 +380,8 @@ type TestInterface interface {
 }
 
 func TestResolveInputFiles_NoMatches(t *testing.T) {
-	pattern := filepath.Join(os.TempDir(), "missing-*.go")
-	files, err := resolveInputFiles([]string{pattern})
+	tmpDir := t.TempDir()
+	pattern := filepath.Join(tmpDir, "missing-*.go")
 	require.Nil(t, files)
 	require.EqualError(t, err, fmt.Sprintf("no files matched pattern %q", pattern))
 }
