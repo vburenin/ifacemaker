@@ -651,10 +651,11 @@ func Make(options MakeOptions) ([]byte, error) {
 	}
 
 	// Validate at least one file contains the input struct Type
-	structPkg, err = resolveStructPackage(allDeclaredTypes, options.StructType)
+	resolvedStructPkg, err := resolveStructPackage(allDeclaredTypes, options.StructType)
 	if err != nil {
 		return nil, err
 	}
+	structPkg = resolvedStructPkg
 
 	excludedMethods := make(map[string]struct{}, len(options.ExcludeMethods))
 	for _, mName := range options.ExcludeMethods {

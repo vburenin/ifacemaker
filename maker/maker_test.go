@@ -292,7 +292,6 @@ func TestParseStructWithDirective(t *testing.T) {
 	require.Equal(t, "This is a Struct with a go:generate directive.", typeDoc)
 }
 
-
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -460,49 +459,31 @@ type MyInterface interface {
 	require.Equal(t, expected, string(b))
 }
 
-func Test_validate_struct_types(t *testing.T) {
-	types := []declaredType{}
-	tt := []struct {
-		name   string
-		inpSet func()
-		stType string
-		exp    bool
-	}{
-		{
-			name: "valid struct type present in file",
-			inpSet: func() {
-				types = append(types, declaredType{Name: t.Name(), Package: t.Name()})
-			},
-			stType: t.Name(),
-			exp:    true,
-		},
-		{
-			name:   "struct not present",
-			inpSet: func() {},
-			stType: fmt.Sprintf("%s-1", t.Name()),
-		},
-		{
-			name: "case mismatch",
-			inpSet: func() {
-				types = append(types, declaredType{Name: "MyStruct", Package: "pkg"})
-			},
-			stType: "mystruct",
-			exp:    false,
-		},
-	}
+func TestResolveStructPackage(t *testing.T) {
+	t.Run("valid struct type present in file", func(t *testing.T) {
+		pkg, err := resolveStructPackage([]declaredType{{Name: "MyStruct", Package: "pkg"}}, "MyStruct")
+		require.NoError(t, err)
+		require.Equal(t, "pkg", pkg)
+	})
 
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			// populate data in test input
-			tc.inpSet()
-			// test
-			got := validateStructType(types, tc.stType)
-			// validate
-			require.Equal(t, tc.exp, got)
-		})
+	t.Run("struct not present", func(t *testing.T) {
+		_, err := resolveStructPackage(nil, fmt.Sprintf("%s-1", t.Name()))
+		require.Error(t, err)
+	})
 
-	}
+	t.Run("case mismatch", func(t *testing.T) {
+		_, err := resolveStructPackage([]declaredType{{Name: "MyStruct", Package: "pkg"}}, "mystruct")
+		require.Error(t, err)
+	})
 
+	t.Run("ambiguous across packages", func(t *testing.T) {
+		_, err := resolveStructPackage([]declaredType{
+			{Name: "MyStruct", Package: "foo"},
+			{Name: "MyStruct", Package: "bar"},
+		}, "MyStruct")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "ambiguous")
+	})
 }
 
 func TestDeclaredTypeFullname(t *testing.T) {
@@ -693,7 +674,7 @@ func TestMakeDuplicateMethods(t *testing.T) {
 type MyStruct struct {}
 func (m *MyStruct) Foo() {}
 `)
-	src2 := []byte(`package other
+	src2 := []byte(`package main
 type MyStruct struct {}
 func (m *MyStruct) Foo() {}
 `)
