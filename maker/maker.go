@@ -421,8 +421,8 @@ func ParseEmbeddingGraph(src []byte) (map[string][]string, error) {
 // It also returns a []string containing all of the imports
 // including their aliases regardless of them being used or
 // not, the imports not used will be removed later using the
-// 'imports' pkg If anything goes wrong, this method will
-// fatally stop the execution
+// 'imports' pkg. If anything goes wrong, this method returns an error
+// to the caller.
 func ParseStruct(src []byte, structName string, structPackage string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string, err error) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
