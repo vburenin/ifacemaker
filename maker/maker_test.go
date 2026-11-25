@@ -1421,3 +1421,28 @@ func TestMake_ParseError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), bad+":2:")
 }
+
+// TestParseStruct_ReceiverTypeParamsNotQualified verifies that the receiver's
+// type parameters are not qualified even when the source package declares a
+// type of the same name.
+func TestParseStruct_ReceiverTypeParamsNotQualified(t *testing.T) {
+	src := []byte(`package store
+
+type T struct{}
+type Item struct{}
+
+type Box[T any] struct{}
+
+func (b *Box[T]) Get(x T) map[T]Item       {}
+func (b *Box[T]) Each(fn func(T) error)    {}
+`)
+	methods, _, _, _ := ParseStruct(src, "Box", false, false, "gen", ParseDeclaredTypes(src), "", false, nil, false)
+	got := make(map[string]string, len(methods))
+	for _, m := range methods {
+		got[m.Name] = m.Code
+	}
+	require.Equal(t, map[string]string{
+		"Get":  "Get(x T) (map[T]store.Item)",
+		"Each": "Each(fn func(T) error)",
+	}, got)
+}

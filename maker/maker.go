@@ -360,6 +360,39 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 	return embeddingGraph
 }
 
+// methodScopeTypes returns the declared types that unqualified identifiers in
+// the signature of fd may refer to. The receiver's type parameters hide every
+// declared type of the same name.
+func methodScopeTypes(declaredTypes []declaredType, fd *ast.FuncDecl) []declaredType {
+	typeParams := make(map[string]struct{})
+	if fd.Recv != nil && len(fd.Recv.List) > 0 {
+		recv := fd.Recv.List[0].Type
+		if star, ok := recv.(*ast.StarExpr); ok {
+			recv = star.X
+		}
+		var indices []ast.Expr
+		switch r := recv.(type) {
+		case *ast.IndexExpr:
+			indices = []ast.Expr{r.Index}
+		case *ast.IndexListExpr:
+			indices = r.Indices
+		}
+		for _, idx := range indices {
+			if id, ok := idx.(*ast.Ident); ok {
+				typeParams[id.Name] = struct{}{}
+			}
+		}
+	}
+	var scoped []declaredType
+	for _, dt := range declaredTypes {
+		if _, ok := typeParams[dt.Name]; ok {
+			continue
+		}
+		scoped = append(scoped, dt)
+	}
+	return scoped
+}
+
 // ParseStruct takes in a piece of source code as a
 // []byte, the name of the struct it should base the
 // interface on and a bool saying whether it should
@@ -425,8 +458,9 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			if !withNotExported && !fd.Name.IsExported() {
 				continue
 			}
-			params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
-			ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+			scoped := methodScopeTypes(declaredTypes, fd)
+			params := FormatFieldList(src, fd.Type.Params, pkgName, scoped)
+			ret := FormatFieldList(src, fd.Type.Results, pkgName, scoped)
 
 			mName = fd.Name.String()
 			method := ""
@@ -467,8 +501,9 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
-				params := FormatFieldList(src, fd.Type.Params, pkgName, declaredTypes)
-				ret := FormatFieldList(src, fd.Type.Results, pkgName, declaredTypes)
+				scoped := methodScopeTypes(declaredTypes, fd)
+				params := FormatFieldList(src, fd.Type.Params, pkgName, scoped)
+				ret := FormatFieldList(src, fd.Type.Results, pkgName, scoped)
 				method := ""
 				if len(ret) == 0 {
 					method = fmt.Sprintf("%s(%s)", mName, strings.Join(params, ", "))
