@@ -561,6 +561,11 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return []byte{}, err
 		}
+		// The Parse* helpers exit the process on a syntax error and do not
+		// know the file name, so report syntax errors from here instead.
+		if _, err := parser.ParseFile(token.NewFileSet(), f, b, parser.ParseComments); err != nil {
+			return []byte{}, err
+		}
 		types := ParseDeclaredTypes(b)
 		graph := ParseEmbeddingGraph(b)
 

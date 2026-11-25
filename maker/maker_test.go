@@ -1402,3 +1402,23 @@ type MyIface interface {
 		require.Equal(t, expected, string(result), "files: %v", files)
 	}
 }
+
+// TestMake_ParseError verifies that Make returns a syntax error in an input
+// file, naming that file, instead of exiting the process.
+func TestMake_ParseError(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.go")
+	bad := filepath.Join(dir, "bad.go")
+	require.NoError(t, os.WriteFile(good, []byte("package main\ntype S struct{}\n"), 0o600))
+	require.NoError(t, os.WriteFile(bad, []byte("package main\nfunc (s *S) Foo() {\n"), 0o600))
+
+	_, err := Make(MakeOptions{
+		Files:      []string{good, bad},
+		StructType: "S",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "MyIface",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), bad+":2:")
+}
