@@ -21,6 +21,9 @@ type Method struct {
 	Name string
 	Code string
 	Docs []string
+	// Promoted is true for a method promoted from an embedded struct
+	// rather than declared on the struct itself.
+	Promoted bool
 }
 
 // declaredType identifies the name and package of a type declaration.
@@ -482,9 +485,10 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 					}
 				}
 				methods = append(methods, Method{
-					Name: mName,
-					Code: method,
-					Docs: docs,
+					Name:     mName,
+					Code:     method,
+					Docs:     docs,
+					Promoted: true,
 				})
 				methodSet[mName] = struct{}{}
 			}
@@ -605,6 +609,7 @@ func Make(options MakeOptions) ([]byte, error) {
 	}
 
 	// Second pass to build up the interface
+	var directMethods, promotedMethods []Method
 	for _, f := range options.Files {
 		src, err := os.ReadFile(f)
 		if err != nil {
@@ -612,14 +617,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 		methods, imports, parsedTypeDoc, parsedParams := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
 		for _, m := range methods {
-			if _, ok := excludedMethods[m.Name]; ok {
-				continue
-			}
-
-			// Use m.Name as the key to ensure uniqueness of methods in mset.
-			if _, ok := mset[m.Name]; !ok {
-				allMethods = append(allMethods, m.Lines()...)
-				mset[m.Name] = struct{}{}
+			if m.Promoted {
+				promotedMethods = append(promotedMethods, m)
+			} else {
+				directMethods = append(directMethods, m)
 			}
 		}
 		for _, i := range imports {
@@ -633,6 +634,20 @@ func Make(options MakeOptions) ([]byte, error) {
 		}
 		if ifaceParams == "" {
 			ifaceParams = parsedParams
+		}
+	}
+
+	// Methods declared on the struct itself take precedence over promoted
+	// methods of the same name, whichever files they are declared in.
+	for _, m := range append(directMethods, promotedMethods...) {
+		if _, ok := excludedMethods[m.Name]; ok {
+			continue
+		}
+
+		// Use m.Name as the key to ensure uniqueness of methods in mset.
+		if _, ok := mset[m.Name]; !ok {
+			allMethods = append(allMethods, m.Lines()...)
+			mset[m.Name] = struct{}{}
 		}
 	}
 

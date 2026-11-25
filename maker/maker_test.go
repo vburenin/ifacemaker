@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -1357,4 +1358,47 @@ func (r *Repo) Inline(s struct{ User User })                 {}
 		got[m.Name] = m.Code
 	}
 	require.Equal(t, expected, got)
+}
+
+// TestMake_WithPromotedOverrideAcrossFiles verifies that a method declared on
+// the struct overrides a promoted method of the same name even when the two
+// are declared in different files, whatever the order of the files.
+func TestMake_WithPromotedOverrideAcrossFiles(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.go")
+	sub := filepath.Join(dir, "sub.go")
+	require.NoError(t, os.WriteFile(base, []byte(`package main
+type Base struct{}
+func (b *Base) Foo() string { return "" }
+func (b *Base) Bar() {}
+
+type Sub struct {
+	Base
+}
+`), 0o600))
+	require.NoError(t, os.WriteFile(sub, []byte(`package main
+func (s *Sub) Foo() int { return 0 }
+`), 0o600))
+
+	expected := `// Test Comment
+
+package main
+
+type MyIface interface {
+	Foo() int
+	Bar()
+}
+`
+	for _, files := range [][]string{{base, sub}, {sub, base}} {
+		result, err := Make(MakeOptions{
+			Files:        files,
+			StructType:   "Sub",
+			Comment:      "Test Comment",
+			PkgName:      "main",
+			IfaceName:    "MyIface",
+			WithPromoted: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, expected, string(result), "files: %v", files)
+	}
 }
