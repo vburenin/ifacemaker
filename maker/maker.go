@@ -150,56 +150,52 @@ func getEmbeddedStructName(expr ast.Expr) string {
 	}
 }
 
-// reMatchTypename matches any of the following to extract the <type>:
-//
-//	*<type>
-//	[]<type>
-//	[]*<type>
-//	map[<keyType>]<type>
-//	map[<keyType>]*<type>
-//
-// Updated regex to support generic type parameters like Foo[T any].
-// The prefix (e.g. pointers or collection modifiers) is optional so that
-// generic types without any modifiers are also matched correctly. The first
-// capture group contains the prefix, if any, and the second group contains the
-// base type name.
-var reMatchTypename = regexp.MustCompile(`^(\[\]|\*|\[\]\*|map\[[^\]]+\]|map\[[^\]]+\]\*)?(\w+)(\[.+\])?$`)
-
-// baseIdentName returns the base identifier name from a type expression. It
-// recursively follows pointer, slice, map and generic expressions until the
-// underlying identifier is reached. If no identifier is present, an empty
-// string is returned.
-func baseIdentName(expr ast.Expr) string {
-	switch e := expr.(type) {
-	case *ast.Ident:
-		return e.Name
-	case *ast.SelectorExpr:
-		return e.Sel.Name
-	case *ast.StarExpr:
-		return baseIdentName(e.X)
-	case *ast.ArrayType:
-		return baseIdentName(e.Elt)
-	case *ast.MapType:
-		return baseIdentName(e.Value)
-	case *ast.IndexExpr:
-		return baseIdentName(e.X)
-	case *ast.IndexListExpr:
-		return baseIdentName(e.X)
-	case *ast.Ellipsis:
-		return baseIdentName(e.Elt)
-	case *ast.ChanType:
-		return baseIdentName(e.Value)
-	case *ast.ParenExpr:
-		return baseIdentName(e.X)
-	default:
-		return ""
-	}
+// qualifyType returns the source text of the type expression expr, with every
+// identifier that names a type declared in a package other than pkgName
+// prefixed by that package's name. Types that are already qualified with a
+// package name, and the names of parameters, results, struct fields and
+// interface methods inside the expression, are left as they are.
+func qualifyType(src []byte, expr ast.Expr, pkgName string, declaredTypes []declaredType) string {
+	start, end := int(expr.Pos())-1, int(expr.End())-1
+	var b strings.Builder
+	names := make(map[*ast.Ident]struct{})
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			// Already qualified, e.g. pkg.Type.
+			return false
+		case *ast.Field:
+			for _, name := range n.Names {
+				names[name] = struct{}{}
+			}
+		case *ast.Ident:
+			if _, ok := names[n]; ok {
+				return false
+			}
+			for _, dt := range declaredTypes {
+				if n.Name == dt.Name && pkgName != dt.Package {
+					// ast.Inspect visits nodes in source order, so the
+					// offsets of qualified identifiers only increase.
+					offset := int(n.Pos()) - 1
+					b.Write(src[start:offset])
+					b.WriteString(dt.Package + ".")
+					start = offset
+					break
+				}
+			}
+		}
+		return true
+	})
+	b.Write(src[start:end])
+	return b.String()
 }
 
 // FormatFieldList takes in the source code as a []byte and a FuncDecl
 // parameters or return values as a FieldList. It returns a slice of strings
 // where each element is one parameter or return value formatted as it appears
-// in the source. If the FieldList input is nil, it returns nil.
+// in the source. Types declared in a package other than pkgName are qualified
+// with their package name, and qualifiers naming pkgName itself are removed.
+// If the FieldList input is nil, it returns nil.
 func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredTypes []declaredType) []string {
 	if fl == nil {
 		return nil
@@ -210,30 +206,7 @@ func FormatFieldList(src []byte, fl *ast.FieldList, pkgName string, declaredType
 		for i, n := range l.Names {
 			names[i] = n.Name
 		}
-		t := string(src[l.Type.Pos()-1 : l.Type.End()-1])
-		// Try to match <modifier><type>. If matched variable `match` will look like this for t=="[]Category":
-		// match[0][0] = "[]Category"
-		// match[0][1] = "[]"
-		// match[0][2] = "Category"
-		t2 := baseIdentName(l.Type)
-		match := reMatchTypename.FindStringSubmatch(t)
-		var prefix, generics string
-		if match != nil {
-			// Extract prefix (e.g. *[] or map[]) and generic parameters
-			prefix = match[1]
-			generics = match[3]
-		}
-
-		for _, dt := range declaredTypes {
-			if t2 == dt.Name && pkgName != dt.Package {
-				if match != nil {
-					t = prefix + dt.Fullname() + generics
-				} else {
-					t = strings.Replace(t, t2, dt.Fullname(), 1)
-				}
-				break
-			}
-		}
+		t := qualifyType(src, l.Type, pkgName, declaredTypes)
 
 		// Strip destination package prefix when source code imports the
 		// same package we are generating into. This handles pointers,

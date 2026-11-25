@@ -1306,3 +1306,55 @@ func Foo(x (MyType)) {}`)
 	require.Len(t, params, 1)
 	require.Equal(t, "x (other.MyType)", params[0])
 }
+
+// TestParseStruct_QualifyDeclaredTypes verifies that every identifier naming a
+// type declared in the source package is qualified when generating into
+// another package, wherever it appears in a parameter or result type, and that
+// already-qualified types and parameter, field and method names are untouched.
+func TestParseStruct_QualifyDeclaredTypes(t *testing.T) {
+	src := []byte(`package store
+
+import "example.com/api"
+
+type User struct{}
+type UserID string
+type Item struct{}
+type Generic[T any] struct{}
+
+const MaxItems = 4
+
+type Repo struct{}
+
+func (r *Repo) Get() *api.User                               {}
+func (r *Repo) ByID() map[api.UserID][]User                  {}
+func (r *Repo) Fixed() [MaxItems]Item                        {}
+func (r *Repo) Index() map[UserID]*User                      {}
+func (r *Repo) Each(fn func(User) error)                     {}
+func (r *Repo) Pair() map[User]User                          {}
+func (r *Repo) Wrap(g Generic[User])                         {}
+func (r *Repo) Callback(cb func(u User) (User, error))       {}
+func (r *Repo) Many(users ...User)                           {}
+func (r *Repo) Iface(i interface{ User() User })             {}
+func (r *Repo) Inline(s struct{ User User })                 {}
+`)
+	expected := map[string]string{
+		"Get":      "Get() (*api.User)",
+		"ByID":     "ByID() (map[api.UserID][]store.User)",
+		"Fixed":    "Fixed() ([MaxItems]store.Item)",
+		"Index":    "Index() (map[store.UserID]*store.User)",
+		"Each":     "Each(fn func(store.User) error)",
+		"Pair":     "Pair() (map[store.User]store.User)",
+		"Wrap":     "Wrap(g store.Generic[store.User])",
+		"Callback": "Callback(cb func(u store.User) (store.User, error))",
+		"Many":     "Many(users ...store.User)",
+		"Iface":    "Iface(i interface{ User() store.User })",
+		"Inline":   "Inline(s struct{ User store.User })",
+	}
+
+	methods, _, _, _ := ParseStruct(src, "Repo", false, false, "gen", ParseDeclaredTypes(src), "", false, nil, false)
+	got := make(map[string]string, len(methods))
+	for _, m := range methods {
+		got[m.Name] = m.Code
+	}
+	require.Equal(t, expected, got)
+}
