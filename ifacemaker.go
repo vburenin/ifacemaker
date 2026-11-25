@@ -59,6 +59,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		if len(matches) == 0 {
+			log.Fatalf("no files match %q", filePattern)
+		}
 		files = append(files, matches...)
 	}
 	result, err := maker.Make(maker.MakeOptions{
