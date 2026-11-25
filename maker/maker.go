@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,10 @@ type Method struct {
 	// Promoted is true for a method promoted from an embedded struct
 	// rather than declared on the struct itself.
 	Promoted bool
+
+	// receiver is the name of the embedded struct a promoted method is
+	// declared on.
+	receiver string
 }
 
 // declaredType identifies the name and package of a type declaration.
@@ -417,6 +422,24 @@ func methodScopeTypes(declaredTypes []declaredType, srcPkg string, fd *ast.FuncD
 // 'imports' pkg If anything goes wrong, this method will
 // fatally stop the execution
 func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string) {
+	var all []Method
+	all, imports, typeDoc, typeParams = parseStruct(src, structName, copyDocs, copyTypeDocs, pkgName, declaredTypes, importModule, withNotExported, embeddedStructNamesSet, withPromoted)
+	// Keep the first method of each name: methods declared on the struct
+	// come first and hide promoted methods of the same name.
+	seen := make(map[string]struct{}, len(all))
+	for _, m := range all {
+		if _, ok := seen[m.Name]; !ok {
+			seen[m.Name] = struct{}{}
+			methods = append(methods, m)
+		}
+	}
+	return methods, imports, typeDoc, typeParams
+}
+
+// parseStruct implements ParseStruct, but returns every method declared on an
+// embedded struct, even when several share a name, so that Make can pick the
+// one Go promotes.
+func parseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool, pkgName string, declaredTypes []declaredType, importModule string, withNotExported bool, embeddedStructNamesSet map[string]struct{}, withPromoted bool) (methods []Method, imports []string, typeDoc string, typeParams string) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "src.go", src, parser.ParseComments)
 	if err != nil {
@@ -455,8 +478,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 		imports = append(imports, fmt.Sprintf(". %s", strconv.Quote(importModule)))
 	}
 
-	// Track methods that are already processed. Keyed by method name
-	// so that promoted methods overridden in the main struct are skipped.
+	// Track the methods declared on the struct, keyed by method name, so
+	// that a method declared twice is only returned once.
 	methodSet := make(map[string]struct{})
 	srcPkg := a.Name.Name
 
@@ -507,9 +530,6 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			_, isEmbedded := embeddedStructNamesSet[a]
 			if isEmbedded {
 				mName := fd.Name.String()
-				if _, ok := methodSet[mName]; ok {
-					continue
-				}
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
@@ -536,8 +556,8 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 					Code:     method,
 					Docs:     docs,
 					Promoted: true,
+					receiver: a,
 				})
-				methodSet[mName] = struct{}{}
 			}
 		}
 	}
@@ -585,6 +605,73 @@ func validateStructType(types []declaredType, stType string) bool {
 
 }
 
+// embedding describes where an embedded struct is found in the struct an
+// interface is generated for.
+type embedding struct {
+	// depth is the shallowest depth at which the struct is embedded,
+	// starting at 1 for a struct embedded directly.
+	depth int
+	// multiple reports whether the struct is embedded through more than
+	// one path at that depth.
+	multiple bool
+}
+
+// embeddings returns the structs embedded, directly or indirectly, in
+// structName according to graph. Like Go's selector lookup, it walks the
+// graph one depth at a time and ignores a struct already found at a
+// shallower depth.
+func embeddings(graph map[string][]string, structName string) map[string]embedding {
+	found := make(map[string]embedding)
+	current := map[string]int{structName: 1} // struct name to number of paths
+	for depth := 1; len(current) > 0; depth++ {
+		next := make(map[string]int)
+		for name, paths := range current {
+			for _, e := range graph[name] {
+				if _, ok := found[e]; !ok && e != structName {
+					next[e] += paths
+				}
+			}
+		}
+		for name, paths := range next {
+			found[name] = embedding{depth: depth, multiple: paths > 1}
+		}
+		current = next
+	}
+	return found
+}
+
+// selectPromoted returns, in their original order, the candidate methods that
+// Go promotes: for each name, the method declared on the shallowest embedded
+// struct. A name declared on more than one struct at that depth, or on a
+// struct embedded through more than one path at that depth, is ambiguous and
+// not promoted at all.
+func selectPromoted(candidates []Method, embedded map[string]embedding) []Method {
+	type selection struct {
+		receiver  string
+		depth     int
+		ambiguous bool
+	}
+	selected := make(map[string]*selection)
+	for _, m := range candidates {
+		e := embedded[m.receiver]
+		s, ok := selected[m.Name]
+		switch {
+		case !ok || e.depth < s.depth:
+			selected[m.Name] = &selection{receiver: m.receiver, depth: e.depth, ambiguous: e.multiple}
+		case e.depth == s.depth && m.receiver != s.receiver:
+			s.ambiguous = true
+		}
+	}
+
+	var methods []Method
+	for _, m := range candidates {
+		if s := selected[m.Name]; !s.ambiguous && m.receiver == s.receiver {
+			methods = append(methods, m)
+		}
+	}
+	return methods
+}
+
 func Make(options MakeOptions) ([]byte, error) {
 	var (
 		allMethods       []string
@@ -624,12 +711,17 @@ func Make(options MakeOptions) ([]byte, error) {
 			}
 		}
 
-		// Track the full call graph
+		// Track the full call graph. A struct seen in several files, or a
+		// file passed twice, must not make an embedding look duplicated.
 		for key, values := range graph {
 			if _, ok := fullEmbeddingGraph[key]; !ok {
 				fullEmbeddingGraph[key] = []string{}
 			}
-			fullEmbeddingGraph[key] = append(fullEmbeddingGraph[key], values...)
+			for _, v := range values {
+				if !slices.Contains(fullEmbeddingGraph[key], v) {
+					fullEmbeddingGraph[key] = append(fullEmbeddingGraph[key], v)
+				}
+			}
 		}
 	}
 
@@ -645,19 +737,10 @@ func Make(options MakeOptions) ([]byte, error) {
 		excludedMethods[mName] = struct{}{}
 	}
 
-	embeddedStructNamesSet := make(map[string]struct{})
-	queue := []string{options.StructType}
-	for len(queue) > 0 {
-		curr := queue[0]
-		queue = queue[1:]
-
-		for _, embeddedStruct := range fullEmbeddingGraph[curr] {
-			if _, ok := embeddedStructNamesSet[embeddedStruct]; ok {
-				continue
-			}
-			embeddedStructNamesSet[embeddedStruct] = struct{}{}
-			queue = append(queue, embeddedStruct)
-		}
+	embedded := embeddings(fullEmbeddingGraph, options.StructType)
+	embeddedStructNamesSet := make(map[string]struct{}, len(embedded))
+	for name := range embedded {
+		embeddedStructNamesSet[name] = struct{}{}
 	}
 
 	// Second pass to build up the interface
@@ -667,7 +750,7 @@ func Make(options MakeOptions) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		methods, imports, parsedTypeDoc, parsedParams := ParseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
+		methods, imports, parsedTypeDoc, parsedParams := parseStruct(src, options.StructType, options.CopyDocs, options.CopyTypeDoc, options.PkgName, allDeclaredTypes, options.ImportModule, options.WithNotExported, embeddedStructNamesSet, options.WithPromoted)
 		for _, m := range methods {
 			if m.Promoted {
 				promotedMethods = append(promotedMethods, m)
@@ -691,7 +774,7 @@ func Make(options MakeOptions) ([]byte, error) {
 
 	// Methods declared on the struct itself take precedence over promoted
 	// methods of the same name, whichever files they are declared in.
-	for _, m := range append(directMethods, promotedMethods...) {
+	for _, m := range append(directMethods, selectPromoted(promotedMethods, embedded)...) {
 		if _, ok := excludedMethods[m.Name]; ok {
 			continue
 		}

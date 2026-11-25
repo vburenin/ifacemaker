@@ -1468,3 +1468,153 @@ func (r *Repo) Get() User { return User{} }
 	require.Len(t, methods, 1)
 	require.Equal(t, "Get() (User)", methods[0].Code)
 }
+
+// TestMake_PromotedMethodSelection verifies that promoted methods follow Go's
+// selector rules: the method of the shallowest embedded struct wins, and a name
+// that is ambiguous at that depth is not promoted at all.
+func TestMake_PromotedMethodSelection(t *testing.T) {
+	dup := `package main
+type Base struct{}
+func (b *Base) Foo() {}
+
+type Sub struct {
+	Base
+}
+`
+	tests := []struct {
+		name     string
+		srcs     []string
+		order    []int // indexes into srcs of the files passed to Make; all of srcs when nil
+		expected []string
+	}{
+		{
+			name: "shallower embedded struct wins",
+			srcs: []string{`package main
+type Inner struct{}
+func (i *Inner) Foo() int { return 0 }
+func (i *Inner) Bar() {}
+
+type Base struct {
+	Inner
+}
+func (b *Base) Foo() string { return "" }
+
+type Sub struct {
+	Base
+}
+`},
+			expected: []string{"Bar()", "Foo() string"},
+		},
+		{
+			name: "shallower embedded struct wins across files",
+			srcs: []string{`package main
+type Inner struct{}
+func (i *Inner) Foo() int { return 0 }
+func (i *Inner) Bar() {}
+`, `package main
+type Base struct {
+	Inner
+}
+func (b *Base) Foo() string { return "" }
+
+type Sub struct {
+	Base
+}
+`},
+			expected: []string{"Bar()", "Foo() string"},
+		},
+		{
+			name: "same name at the same depth is ambiguous",
+			srcs: []string{`package main
+type A struct{}
+func (a *A) Close() error { return nil }
+func (a *A) OnlyA() {}
+
+type B struct{}
+func (b *B) Close() error { return nil }
+
+type Sub struct {
+	A
+	B
+}
+`},
+			expected: []string{"OnlyA()"},
+		},
+		{
+			name: "struct embedded twice at the same depth is ambiguous",
+			srcs: []string{`package main
+type C struct{}
+func (c *C) Foo() {}
+
+type A struct {
+	C
+}
+
+type B struct {
+	C
+}
+func (b *B) Bar() {}
+
+type Sub struct {
+	A
+	B
+}
+`},
+			expected: []string{"Bar()"},
+		},
+		{
+			name: "struct found at a shallower depth is not ambiguous deeper down",
+			srcs: []string{`package main
+type C struct{}
+func (c *C) Foo() {}
+
+type A struct {
+	C
+}
+
+type Sub struct {
+	A
+	C
+}
+`},
+			expected: []string{"Foo()"},
+		},
+		{
+			name:     "file passed twice is not ambiguous",
+			srcs:     []string{dup},
+			order:    []int{0, 0},
+			expected: []string{"Foo()"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			paths := make([]string, len(tt.srcs))
+			for i, src := range tt.srcs {
+				paths[i] = filepath.Join(dir, fmt.Sprintf("f%d.go", i))
+				require.NoError(t, os.WriteFile(paths[i], []byte(src), 0o600))
+			}
+			files := paths
+			if tt.order != nil {
+				files = nil
+				for _, i := range tt.order {
+					files = append(files, paths[i])
+				}
+			}
+
+			result, err := Make(MakeOptions{
+				Files:        files,
+				StructType:   "Sub",
+				Comment:      "Test Comment",
+				PkgName:      "main",
+				IfaceName:    "MyIface",
+				WithPromoted: true,
+			})
+			require.NoError(t, err)
+			expected := "// Test Comment\n\npackage main\n\ntype MyIface interface {\n\t" +
+				strings.Join(tt.expected, "\n\t") + "\n}\n"
+			require.Equal(t, expected, string(result))
+		})
+	}
+}
