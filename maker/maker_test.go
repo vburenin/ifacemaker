@@ -282,7 +282,6 @@ func TestParseStructWithDirective(t *testing.T) {
 	require.Equal(t, "This is a Struct with a go:generate directive.", typeDoc)
 }
 
-
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
 	a, err := parser.ParseFile(fset, "", src, parser.ParseComments)
