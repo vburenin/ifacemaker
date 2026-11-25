@@ -1446,3 +1446,25 @@ func (b *Box[T]) Each(fn func(T) error)    {}
 		"Each": "Each(fn func(T) error)",
 	}, got)
 }
+
+// TestParseStruct_LocalTypeHidesOtherPackage verifies that an unqualified type
+// is qualified with the package of the file it appears in when another input
+// package declares a type of the same name.
+func TestParseStruct_LocalTypeHidesOtherPackage(t *testing.T) {
+	src := []byte(`package store
+
+type User struct{}
+type Repo struct{}
+
+func (r *Repo) Get() User { return User{} }
+`)
+	types := append([]declaredType{{Name: "User", Package: "api"}}, ParseDeclaredTypes(src)...)
+
+	methods, _, _, _ := ParseStruct(src, "Repo", false, false, "gen", types, "", false, nil, false)
+	require.Len(t, methods, 1)
+	require.Equal(t, "Get() (store.User)", methods[0].Code)
+
+	methods, _, _, _ = ParseStruct(src, "Repo", false, false, "store", types, "", false, nil, false)
+	require.Len(t, methods, 1)
+	require.Equal(t, "Get() (User)", methods[0].Code)
+}

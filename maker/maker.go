@@ -361,9 +361,17 @@ func ParseEmbeddingGraph(src []byte) map[string][]string {
 }
 
 // methodScopeTypes returns the declared types that unqualified identifiers in
-// the signature of fd may refer to. The receiver's type parameters hide every
-// declared type of the same name.
-func methodScopeTypes(declaredTypes []declaredType, fd *ast.FuncDecl) []declaredType {
+// the signature of fd, a method in a file of package srcPkg, may refer to. A
+// type declared in srcPkg hides types of the same name declared in other
+// packages, and the receiver's type parameters hide every declared type of
+// the same name.
+func methodScopeTypes(declaredTypes []declaredType, srcPkg string, fd *ast.FuncDecl) []declaredType {
+	hidden := make(map[string]struct{})
+	for _, dt := range declaredTypes {
+		if dt.Package == srcPkg {
+			hidden[dt.Name] = struct{}{}
+		}
+	}
 	typeParams := make(map[string]struct{})
 	if fd.Recv != nil && len(fd.Recv.List) > 0 {
 		recv := fd.Recv.List[0].Type
@@ -386,6 +394,9 @@ func methodScopeTypes(declaredTypes []declaredType, fd *ast.FuncDecl) []declared
 	var scoped []declaredType
 	for _, dt := range declaredTypes {
 		if _, ok := typeParams[dt.Name]; ok {
+			continue
+		}
+		if _, ok := hidden[dt.Name]; ok && dt.Package != srcPkg {
 			continue
 		}
 		scoped = append(scoped, dt)
@@ -447,6 +458,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 	// Track methods that are already processed. Keyed by method name
 	// so that promoted methods overridden in the main struct are skipped.
 	methodSet := make(map[string]struct{})
+	srcPkg := a.Name.Name
 
 	// Process direct methods first
 	for _, d := range a.Decls {
@@ -458,7 +470,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 			if !withNotExported && !fd.Name.IsExported() {
 				continue
 			}
-			scoped := methodScopeTypes(declaredTypes, fd)
+			scoped := methodScopeTypes(declaredTypes, srcPkg, fd)
 			params := FormatFieldList(src, fd.Type.Params, pkgName, scoped)
 			ret := FormatFieldList(src, fd.Type.Results, pkgName, scoped)
 
@@ -501,7 +513,7 @@ func ParseStruct(src []byte, structName string, copyDocs bool, copyTypeDocs bool
 				if !withNotExported && !fd.Name.IsExported() {
 					continue
 				}
-				scoped := methodScopeTypes(declaredTypes, fd)
+				scoped := methodScopeTypes(declaredTypes, srcPkg, fd)
 				params := FormatFieldList(src, fd.Type.Params, pkgName, scoped)
 				ret := FormatFieldList(src, fd.Type.Results, pkgName, scoped)
 				method := ""
