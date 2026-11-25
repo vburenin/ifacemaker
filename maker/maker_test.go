@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -280,7 +281,6 @@ func TestParseStructWithDirective(t *testing.T) {
 	require.Equal(t, `notmain "fmt"`, trimmedImp)
 	require.Equal(t, "This is a Struct with a go:generate directive.", typeDoc)
 }
-
 
 func TestGetReceiverTypeName(t *testing.T) {
 	fset := token.NewFileSet()
@@ -1305,4 +1305,316 @@ func Foo(x (MyType)) {}`)
 	params := FormatFieldList(src, fd.Type.Params, "main", declaredTypes)
 	require.Len(t, params, 1)
 	require.Equal(t, "x (other.MyType)", params[0])
+}
+
+// TestParseStruct_QualifyDeclaredTypes verifies that every identifier naming a
+// type declared in the source package is qualified when generating into
+// another package, wherever it appears in a parameter or result type, and that
+// already-qualified types and parameter, field and method names are untouched.
+func TestParseStruct_QualifyDeclaredTypes(t *testing.T) {
+	src := []byte(`package store
+
+import "example.com/api"
+
+type User struct{}
+type UserID string
+type Item struct{}
+type Generic[T any] struct{}
+
+const MaxItems = 4
+
+type Repo struct{}
+
+func (r *Repo) Get() *api.User                               {}
+func (r *Repo) ByID() map[api.UserID][]User                  {}
+func (r *Repo) Fixed() [MaxItems]Item                        {}
+func (r *Repo) Index() map[UserID]*User                      {}
+func (r *Repo) Each(fn func(User) error)                     {}
+func (r *Repo) Pair() map[User]User                          {}
+func (r *Repo) Wrap(g Generic[User])                         {}
+func (r *Repo) Callback(cb func(u User) (User, error))       {}
+func (r *Repo) Many(users ...User)                           {}
+func (r *Repo) Iface(i interface{ User() User })             {}
+func (r *Repo) Inline(s struct{ User User })                 {}
+`)
+	expected := map[string]string{
+		"Get":      "Get() (*api.User)",
+		"ByID":     "ByID() (map[api.UserID][]store.User)",
+		"Fixed":    "Fixed() ([MaxItems]store.Item)",
+		"Index":    "Index() (map[store.UserID]*store.User)",
+		"Each":     "Each(fn func(store.User) error)",
+		"Pair":     "Pair() (map[store.User]store.User)",
+		"Wrap":     "Wrap(g store.Generic[store.User])",
+		"Callback": "Callback(cb func(u store.User) (store.User, error))",
+		"Many":     "Many(users ...store.User)",
+		"Iface":    "Iface(i interface{ User() store.User })",
+		"Inline":   "Inline(s struct{ User store.User })",
+	}
+
+	methods, _, _, _ := ParseStruct(src, "Repo", false, false, "gen", ParseDeclaredTypes(src), "", false, nil, false)
+	got := make(map[string]string, len(methods))
+	for _, m := range methods {
+		got[m.Name] = m.Code
+	}
+	require.Equal(t, expected, got)
+}
+
+// TestMake_WithPromotedOverrideAcrossFiles verifies that a method declared on
+// the struct overrides a promoted method of the same name even when the two
+// are declared in different files, whatever the order of the files.
+func TestMake_WithPromotedOverrideAcrossFiles(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.go")
+	sub := filepath.Join(dir, "sub.go")
+	require.NoError(t, os.WriteFile(base, []byte(`package main
+type Base struct{}
+func (b *Base) Foo() string { return "" }
+func (b *Base) Bar() {}
+
+type Sub struct {
+	Base
+}
+`), 0o600))
+	require.NoError(t, os.WriteFile(sub, []byte(`package main
+func (s *Sub) Foo() int { return 0 }
+`), 0o600))
+
+	expected := `// Test Comment
+
+package main
+
+type MyIface interface {
+	Foo() int
+	Bar()
+}
+`
+	for _, files := range [][]string{{base, sub}, {sub, base}} {
+		result, err := Make(MakeOptions{
+			Files:        files,
+			StructType:   "Sub",
+			Comment:      "Test Comment",
+			PkgName:      "main",
+			IfaceName:    "MyIface",
+			WithPromoted: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, expected, string(result), "files: %v", files)
+	}
+}
+
+// TestMake_ParseError verifies that Make returns a syntax error in an input
+// file, naming that file, instead of exiting the process.
+func TestMake_ParseError(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.go")
+	bad := filepath.Join(dir, "bad.go")
+	require.NoError(t, os.WriteFile(good, []byte("package main\ntype S struct{}\n"), 0o600))
+	require.NoError(t, os.WriteFile(bad, []byte("package main\nfunc (s *S) Foo() {\n"), 0o600))
+
+	_, err := Make(MakeOptions{
+		Files:      []string{good, bad},
+		StructType: "S",
+		Comment:    "Test Comment",
+		PkgName:    "main",
+		IfaceName:  "MyIface",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), bad+":2:")
+}
+
+// TestParseStruct_ReceiverTypeParamsNotQualified verifies that the receiver's
+// type parameters are not qualified even when the source package declares a
+// type of the same name.
+func TestParseStruct_ReceiverTypeParamsNotQualified(t *testing.T) {
+	src := []byte(`package store
+
+type T struct{}
+type Item struct{}
+
+type Box[T any] struct{}
+
+func (b *Box[T]) Get(x T) map[T]Item       {}
+func (b *Box[T]) Each(fn func(T) error)    {}
+`)
+	methods, _, _, _ := ParseStruct(src, "Box", false, false, "gen", ParseDeclaredTypes(src), "", false, nil, false)
+	got := make(map[string]string, len(methods))
+	for _, m := range methods {
+		got[m.Name] = m.Code
+	}
+	require.Equal(t, map[string]string{
+		"Get":  "Get(x T) (map[T]store.Item)",
+		"Each": "Each(fn func(T) error)",
+	}, got)
+}
+
+// TestParseStruct_LocalTypeHidesOtherPackage verifies that an unqualified type
+// is qualified with the package of the file it appears in when another input
+// package declares a type of the same name.
+func TestParseStruct_LocalTypeHidesOtherPackage(t *testing.T) {
+	src := []byte(`package store
+
+type User struct{}
+type Repo struct{}
+
+func (r *Repo) Get() User { return User{} }
+`)
+	types := append([]declaredType{{Name: "User", Package: "api"}}, ParseDeclaredTypes(src)...)
+
+	methods, _, _, _ := ParseStruct(src, "Repo", false, false, "gen", types, "", false, nil, false)
+	require.Len(t, methods, 1)
+	require.Equal(t, "Get() (store.User)", methods[0].Code)
+
+	methods, _, _, _ = ParseStruct(src, "Repo", false, false, "store", types, "", false, nil, false)
+	require.Len(t, methods, 1)
+	require.Equal(t, "Get() (User)", methods[0].Code)
+}
+
+// TestMake_PromotedMethodSelection verifies that promoted methods follow Go's
+// selector rules: the method of the shallowest embedded struct wins, and a name
+// that is ambiguous at that depth is not promoted at all.
+func TestMake_PromotedMethodSelection(t *testing.T) {
+	dup := `package main
+type Base struct{}
+func (b *Base) Foo() {}
+
+type Sub struct {
+	Base
+}
+`
+	tests := []struct {
+		name     string
+		srcs     []string
+		order    []int // indexes into srcs of the files passed to Make; all of srcs when nil
+		expected []string
+	}{
+		{
+			name: "shallower embedded struct wins",
+			srcs: []string{`package main
+type Inner struct{}
+func (i *Inner) Foo() int { return 0 }
+func (i *Inner) Bar() {}
+
+type Base struct {
+	Inner
+}
+func (b *Base) Foo() string { return "" }
+
+type Sub struct {
+	Base
+}
+`},
+			expected: []string{"Bar()", "Foo() string"},
+		},
+		{
+			name: "shallower embedded struct wins across files",
+			srcs: []string{`package main
+type Inner struct{}
+func (i *Inner) Foo() int { return 0 }
+func (i *Inner) Bar() {}
+`, `package main
+type Base struct {
+	Inner
+}
+func (b *Base) Foo() string { return "" }
+
+type Sub struct {
+	Base
+}
+`},
+			expected: []string{"Bar()", "Foo() string"},
+		},
+		{
+			name: "same name at the same depth is ambiguous",
+			srcs: []string{`package main
+type A struct{}
+func (a *A) Close() error { return nil }
+func (a *A) OnlyA() {}
+
+type B struct{}
+func (b *B) Close() error { return nil }
+
+type Sub struct {
+	A
+	B
+}
+`},
+			expected: []string{"OnlyA()"},
+		},
+		{
+			name: "struct embedded twice at the same depth is ambiguous",
+			srcs: []string{`package main
+type C struct{}
+func (c *C) Foo() {}
+
+type A struct {
+	C
+}
+
+type B struct {
+	C
+}
+func (b *B) Bar() {}
+
+type Sub struct {
+	A
+	B
+}
+`},
+			expected: []string{"Bar()"},
+		},
+		{
+			name: "struct found at a shallower depth is not ambiguous deeper down",
+			srcs: []string{`package main
+type C struct{}
+func (c *C) Foo() {}
+
+type A struct {
+	C
+}
+
+type Sub struct {
+	A
+	C
+}
+`},
+			expected: []string{"Foo()"},
+		},
+		{
+			name:     "file passed twice is not ambiguous",
+			srcs:     []string{dup},
+			order:    []int{0, 0},
+			expected: []string{"Foo()"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			paths := make([]string, len(tt.srcs))
+			for i, src := range tt.srcs {
+				paths[i] = filepath.Join(dir, fmt.Sprintf("f%d.go", i))
+				require.NoError(t, os.WriteFile(paths[i], []byte(src), 0o600))
+			}
+			files := paths
+			if tt.order != nil {
+				files = nil
+				for _, i := range tt.order {
+					files = append(files, paths[i])
+				}
+			}
+
+			result, err := Make(MakeOptions{
+				Files:        files,
+				StructType:   "Sub",
+				Comment:      "Test Comment",
+				PkgName:      "main",
+				IfaceName:    "MyIface",
+				WithPromoted: true,
+			})
+			require.NoError(t, err)
+			expected := "// Test Comment\n\npackage main\n\ntype MyIface interface {\n\t" +
+				strings.Join(tt.expected, "\n\t") + "\n}\n"
+			require.Equal(t, expected, string(result))
+		})
+	}
 }

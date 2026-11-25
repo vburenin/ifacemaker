@@ -33,13 +33,16 @@ type cmdlineArgs struct {
 
 func main() {
 	var args cmdlineArgs
-	_, err := flags.ParseArgs(&args, os.Args)
+	rest, err := flags.ParseArgs(&args, os.Args[1:])
 	if err != nil {
 		if flags.WroteHelp(err) {
 			return
 		}
 		// No need to log the error, flags.ParseArgs() already does this
 		os.Exit(1)
+	}
+	if len(rest) > 0 {
+		log.Fatalf("unexpected arguments %q; use -f for each input file and quote glob patterns", rest)
 	}
 
 	// Workaround because jessevdk/go-flags doesn't support default values for boolean flags
@@ -58,6 +61,9 @@ func main() {
 		matches, err := filepath.Glob(filePattern)
 		if err != nil {
 			log.Fatal(err)
+		}
+		if len(matches) == 0 {
+			log.Fatalf("no files match %q", filePattern)
 		}
 		files = append(files, matches...)
 	}

@@ -552,7 +552,7 @@ func TestMainHelp(t *testing.T) {
 
 func TestMainMakeError(t *testing.T) {
 	if os.Getenv("BE_CRASHER_MAKEERR") == "1" {
-		os.Args = []string{"cmd", "-f", "/no/such/file.go", "-s", "Foo", "-p", "gen", "-i", "Iface"}
+		os.Args = []string{"cmd", "-f", srcFile, "-s", "NoSuchStruct", "-p", "gen", "-i", "Iface"}
 		main()
 		return
 	}
@@ -619,4 +619,38 @@ func TestMainOutputWriteError(t *testing.T) {
 		return
 	}
 	t.Fatalf("main did not exit as expected")
+}
+
+// TestMainUnmatchedFilePattern verifies that a -f pattern matching no files is
+// reported instead of being silently ignored.
+func TestMainUnmatchedFilePattern(t *testing.T) {
+	if missing := os.Getenv("BE_CRASHER_NOMATCH"); missing != "" {
+		os.Args = []string{"cmd", "-f", srcFile, "-f", missing, "-s", "Person", "-i", "Iface", "-p", "gen"}
+		main()
+		return
+	}
+	missing := filepath.Join(t.TempDir(), "missing.go")
+	cmd := exec.Command(testBinary, "-test.run=^TestMainUnmatchedFilePattern$")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_NOMATCH="+missing)
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "main did not exit with an error, output:\n%s", out)
+	require.Contains(t, string(out), fmt.Sprintf("no files match %q", missing))
+}
+
+// TestMainUnexpectedArgs verifies that positional arguments, such as the extra
+// files of an unquoted glob expanded by the shell, are rejected instead of
+// being silently ignored.
+func TestMainUnexpectedArgs(t *testing.T) {
+	if os.Getenv("BE_CRASHER_ARGS") == "1" {
+		os.Args = []string{"cmd", "-f", srcFile2, srcFile2_ext, "-s", "TestImpl", "-i", "Test", "-p", "gen"}
+		main()
+		return
+	}
+	cmd := exec.Command(testBinary, "-test.run=^TestMainUnexpectedArgs$")
+	cmd.Env = append(os.Environ(), "BE_CRASHER_ARGS=1")
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "main did not exit with an error, output:\n%s", out)
+	require.Contains(t, string(out), fmt.Sprintf("unexpected arguments %q", []string{srcFile2_ext}))
 }
